@@ -19,6 +19,7 @@ import { ensureUT } from '../core/UIUtil';
 import { CharacterDef } from '../data/Characters';
 import { WeaponDef, WEAPONS, WeaponId } from '../data/Weapons';
 import { drawGun, weaponByIndex } from './GunArt';
+import { drawFighterRig } from '../core/FighterArt';
 import { TileWorld } from '../world/TileWorld';
 import { bus, Evt } from '../core/EventBus';
 
@@ -108,48 +109,16 @@ export class Fighter extends Component {
     }
 
     private drawSelf() {
-        const g = this.bodyG;
-        g.clear();
-        const w = this.w, h = this.h;
-        // legs
-        g.fillColor = new Color(40, 40, 48);
-        g.rect(-w * 0.38, -h / 2, w * 0.28, h * 0.34);
-        g.fill();
-        g.rect(w * 0.10, -h / 2, w * 0.28, h * 0.34);
-        g.fill();
-        // torso
-        g.fillColor = this.char.body;
-        g.roundRect(-w / 2, -h * 0.18, w, h * 0.52, 8);
-        g.fill();
-        // scarf accent
-        g.fillColor = this.char.accent;
-        g.roundRect(-w / 2, h * 0.16, w, h * 0.14, 5);
-        g.fill();
-        // head
-        g.fillColor = this.char.skin;
-        g.circle(0, h * 0.30, w * 0.34);
-        g.fill();
-        // helmet
-        g.fillColor = new Color(50, 50, 60);
-        g.arc(0, h * 0.30, w * 0.36, Math.PI * 0.05, Math.PI * 0.95, false);
-        g.fill();
-        g.fillRect(-w * 0.36, h * 0.27, w * 0.72, h * 0.07);
-        // eye
-        g.fillColor = new Color(255, 255, 255);
-        g.circle(this.faceDir * w * 0.16, h * 0.29, w * 0.08);
-        g.fill();
-        g.fillColor = new Color(20, 20, 20);
-        g.circle(this.faceDir * w * 0.19, h * 0.29, w * 0.04);
-        g.fill();
-        // gun
-        g.fillColor = new Color(55, 55, 65);
-        g.rect(w * 0.1, -h * 0.02, w * 0.85, 9);
-        g.fill();
+        // Rig drawing lives in core/FighterArt so the menu's outfit editor
+        // preview renders the exact same look (the held weapon stays on its
+        // own GunArt layer drawn by init()).
+        drawFighterRig(this.bodyG, this.char, this.w, this.h, this.faceDir);
 
         if (this.invuln > 0 && Math.floor(this.invuln * 12) % 2 === 0) {
+            const g = this.bodyG;
             g.lineWidth = 3;
             g.strokeColor = new Color(255, 255, 255, 140);
-            g.rect(-w * 0.7, -h * 0.6, w * 1.4, h * 1.2);
+            g.rect(-this.w * 0.7, -this.h * 0.6, this.w * 1.4, this.h * 1.2);
             g.stroke();
         }
     }

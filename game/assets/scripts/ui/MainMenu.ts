@@ -1,9 +1,16 @@
 import { _decorator, Color, Component, EditBox, Graphics, Label, Node, UITransform } from 'cc';
 const { ccclass } = _decorator;
-import { CHARACTERS } from '../data/Characters';
+import {
+    CHARACTERS, OutfitOverride,
+    loadOutfit, saveOutfit, resolveChar, toHex,
+} from '../data/Characters';
 import { MAPS } from '../data/Maps';
 import { getLang, setLang, t } from '../data/Strings';
 import { ensureUT } from '../core/UIUtil';
+import { CFG } from '../core/GameConfig';
+import { drawFighterRig } from '../core/FighterArt';
+import { WeaponId, WEAPONS } from '../data/Weapons';
+import { drawGun } from '../gameplay/GunArt';
 import { LanClient, PeerMsg } from '../net/LanClient';
 
 export type MenuMode = 'bots' | 'local' | 'netHost' | 'netGuest';
@@ -14,15 +21,34 @@ export interface MenuState {
     twoPlayers: boolean;
     charP1: number;
     charP2: number;
+    /** Custom outfit overrides per player slot (persisted + LAN-synced). */
+    outfitP1: OutfitOverride;
+    outfitP2: OutfitOverride;
     /** Live LAN connection handed over to GameRoot on match start. */
     lan: LanClient | null;
 }
+
+// ---- outfit editor palettes ----------------------------------------------
+// Clothes/scarf share a vivid Ethiopian-flag-inspired palette plus
+// neutrals; skin tones span a realistic range.
+const CLOTHES_PALETTE = [
+    '#2e7d32', '#c62828', '#1565c0', '#8e24aa', '#fdd835', '#fb8c00',
+    '#00897b', '#d81b60', '#5d4037', '#212121', '#f5f5f5', '#455a64',
+];
+const SCARF_PALETTE = [
+    '#ffc107', '#ffecb3', '#ffffff', '#e53935', '#ffd54f', '#8d6e63',
+    '#4fc3f7', '#aed581', '#f48fb1', '#9575cd',
+];
+const SKIN_TONES = [
+    '#ffe0bd', '#e8b98a', '#c68642', '#8d5524', '#6b3f1d', '#4a2c15',
+];
 
 /** Fully code-built main menu (no scene/prefab assets needed). */
 @ccclass('MainMenu')
 export class MainMenu extends Component {
     state: MenuState = {
         mode: 'bots', mapIndex: 0, twoPlayers: false, charP1: 0, charP2: 1,
+        outfitP1: loadOutfit('p1'), outfitP2: loadOutfit('p2'),
         lan: null,
     };
     onStart: ((s: MenuState) => void) | null = null;
@@ -32,6 +58,8 @@ export class MainMenu extends Component {
     private mapPreview!: Graphics;
     private p1Label: Label | null = null;
     private p2Label: Label | null = null;
+    // Outfit editor panel bits
+    private outfitNode: Node | null = null;
     // LAN panel bits
     private lanClient: LanClient | null = null;
     private panelNode: Node | null = null;
@@ -111,12 +139,12 @@ export class MainMenu extends Component {
         this.button(t('lan_join'), 170, -370, () => this.openLanPanel('join'),
             300, 76, new Color(0, 105, 92));
 
-        // character selectors
-        this.p1Label = this.charRow(-650, (dir) => {
+        // character selectors (with per-slot outfit customization)
+        this.p1Label = this.charRow(-650, 'p1', (dir) => {
             this.state.charP1 = (this.state.charP1 + dir + CHARACTERS.length) % CHARACTERS.length;
             this.refreshChars();
         });
-        this.p2Label = this.charRow(650, (dir) => {
+        this.p2Label = this.charRow(650, 'p2', (dir) => {
             this.state.charP2 = (this.state.charP2 + dir + CHARACTERS.length) % CHARACTERS.length;
             this.refreshChars();
         });
@@ -124,12 +152,16 @@ export class MainMenu extends Component {
         this.refreshAll();
     }
 
-    private charRow(x: number, onChange: (d: number) => void): Label {
+    private charRow(x: number, slot: 'p1' | 'p2',
+                    onChange: (d: number) => void): Label {
         const lblN = new Node('charLbl' + x);
         this.node.addChild(lblN);
         const lbl = this.makeLabel(lblN, '', x, -450, 36);
         this.arrowButton(x - 260, -450, '<', () => onChange(-1), true);
         this.arrowButton(x + 260, -450, '>', () => onChange(1), true);
+        this.button(t('customize'), x, -545,
+            () => this.openOutfitPanel(slot), 240, 60,
+            new Color(96, 78, 40));
         return lbl;
     }
 
@@ -152,8 +184,147 @@ export class MainMenu extends Component {
     private rebuildTexts() {
         // simplest robust approach: rebuild whole menu
         this.closeLan();
+        if (this.outfitNode && this.outfitNode.isValid) this.outfitNode.destroy();
+        this.outfitNode = null;
         this.node.removeAllChildren();
         this.build();
+    }
+
+    // ---- outfit editor -----------------------------------------------------
+    /**
+     * Full-screen outfit editor for one player slot: live fighter preview
+     * plus swatch rows for clothes / scarf / skin. Every change applies to
+     * the menu state and persists immediately, so backing out never loses
+     * a look the player liked.
+     */
+    private openOutfitPanel(slot: 'p1' | 'p2') {
+        if (this.outfitNode && this.outfitNode.isValid) this.outfitNode.destroy();
+
+        const W = 1920, H = 1080;
+        const pn = new Node('outfitPanel');
+        this.node.addChild(pn);
+        pn.addComponent(UITransform);
+        this.outfitNode = pn;
+
+        const g = pn.addComponent(Graphics);
+        g.fillColor = new Color(8, 10, 16, 245);
+        g.rect(-W / 2, -H / 2, W, H);
+        g.fill();
+
+        const charIdx = slot === 'p1' ? this.state.charP1 : this.state.charP2;
+        let ov: OutfitOverride = { ...(slot === 'p1' ? this.state.outfitP1 : this.state.outfitP2) };
+
+        // working copy -> menu state + localStorage
+        const commit = () => {
+            if (slot === 'p1') this.state.outfitP1 = { ...ov };
+            else this.state.outfitP2 = { ...ov };
+            saveOutfit(slot, ov);
+        };
+
+        // title
+        const titleN = new Node('ofTitle');
+        pn.addChild(titleN);
+        ensureUT(titleN);
+        titleN.setPosition(0, 430, 0);
+        const tl = titleN.addComponent(Label);
+        tl.string = `${t('customize')} — ${t(CHARACTERS[charIdx].nameKey)}`;
+        tl.fontSize = 64;
+        tl.lineHeight = 80;
+        tl.color = new Color(255, 226, 150);
+
+        // live fighter preview (same rig + rifle layer the game renders)
+        const prevN = new Node('preview');
+        pn.addChild(prevN);
+        ensureUT(prevN);
+        prevN.setPosition(-470, 40, 0);
+        prevN.setScale(2.8, 2.8, 1);
+        const pg = prevN.addComponent(Graphics);
+        const gunN = new Node('gun');
+        prevN.addChild(gunN);
+        ensureUT(gunN);
+        const gunG = gunN.addComponent(Graphics);
+        gunN.setPosition(CFG.PLAYER_W * 0.06, -CFG.PLAYER_H * 0.02, 0);
+        drawGun(gunG, WEAPONS[WeaponId.RIFLE], 0);
+        const padN = new Node('pad');
+        pn.addChild(padN);
+        ensureUT(padN);
+        padN.setPosition(-470, -170, 0);
+        const padG = padN.addComponent(Graphics);
+        padG.fillColor = new Color(28, 34, 46);
+        padG.roundRect(-110, -160, 220, 330, 18);
+        padG.fill();
+
+        // swatch rows: [state key, i18n label, palette]
+        const rows: { key: 'b' | 'a' | 's'; label: string; colors: string[] }[] = [
+            { key: 'b', label: t('outfit_body'), colors: CLOTHES_PALETTE },
+            { key: 'a', label: t('outfit_scarf'), colors: SCARF_PALETTE },
+            { key: 's', label: t('outfit_skin'), colors: SKIN_TONES },
+        ];
+        interface Sw { hex: string; g: Graphics; }
+        const swatches: Record<string, Sw[]> = { b: [], a: [], s: [] };
+        const GAP = 58, R = 22;
+
+        let y = 250;
+        for (const row of rows) {
+            const lblN = new Node('rowLbl' + row.key);
+            pn.addChild(lblN);
+            ensureUT(lblN);
+            lblN.setPosition(-560, y, 0);
+            const rl = lblN.addComponent(Label);
+            rl.string = row.label;
+            rl.fontSize = 34;
+            rl.lineHeight = 42;
+            rl.color = new Color(200, 205, 215);
+            (lblN.getComponent(UITransform)!).setContentSize(300, 50);
+
+            row.colors.forEach((hex, i) => {
+                const n = new Node(`sw_${row.key}_${i}`);
+                pn.addChild(n);
+                n.setPosition(-330 + i * GAP, y, 0);
+                n.addComponent(UITransform).setContentSize(R * 2 + 12, R * 2 + 12);
+                const sg = n.addComponent(Graphics);
+                swatches[row.key].push({ hex, g: sg });
+                n.on(Node.EventType.TOUCH_END, () => {
+                    ov[row.key] = hex;
+                    commit();
+                    repaint();
+                });
+            });
+            y -= 140;
+        }
+
+        // redraw preview + selection rings; called after every change
+        const repaint = () => {
+            drawFighterRig(pg, resolveChar(charIdx, ov));
+            for (const row of rows) {
+                for (const sw of swatches[row.key]) {
+                    sw.g.clear();
+                    sw.g.fillColor = new Color(sw.hex);
+                    sw.g.circle(0, 0, R);
+                    sw.g.fill();
+                    const selected = ov[row.key] === sw.hex;
+                    sw.g.lineWidth = selected ? 5 : 2;
+                    sw.g.strokeColor = selected
+                        ? new Color(255, 255, 255)
+                        : new Color(255, 255, 255, 60);
+                    sw.g.circle(0, 0, R + (selected ? 4 : 3));
+                    sw.g.stroke();
+                }
+            }
+        };
+        repaint();
+
+        // Defaults: clear every override back to roster colors
+        this.button(t('outfit_reset'), -230, -420, () => {
+            ov = {};
+            commit();
+            repaint();
+        }, 300, 84, new Color(62, 74, 96));
+
+        this.button(t('done'), 230, -420, () => {
+            pn.destroy();
+            if (this.outfitNode === pn) this.outfitNode = null;
+        }, 300, 84, new Color(46, 125, 50));
     }
 
     // ---- LAN room panel ---------------------------------------------------
@@ -320,6 +491,7 @@ export class MainMenu extends Component {
         lan.onData = (d: PeerMsg) => {
             if (d.m === 'hello') {
                 this.state.charP2 = d.char % CHARACTERS.length;
+                if (d.outfit) this.state.outfitP2 = d.outfit; // adopt peer's look
                 this.setStatus(`${t('peer_found')} (${t(CHARACTERS[this.state.charP2].nameKey)})`);
                 this.enableStart(true);
             } else if (d.m === 'start') {
@@ -363,6 +535,8 @@ export class MainMenu extends Component {
             mapIndex: this.state.mapIndex,
             charHost: this.state.charP1,
             charGuest: this.state.charP2,
+            outfitHost: this.state.outfitP1,
+            outfitGuest: this.state.outfitP2,
         });
         this.detachNetHandlers();
         this.state.mode = 'netHost';
@@ -378,7 +552,7 @@ export class MainMenu extends Component {
         const lan = this.getLan();
         lan.role = 'guest';
         lan.onReady = () => {
-            lan.send({ m: 'hello', char: this.state.charP2 });
+            lan.send({ m: 'hello', char: this.state.charP2, outfit: this.state.outfitP2 });
             this.setStatus(t('peer_found') + ' — ' + t('waiting_peer'));
         };
         lan.onData = (d: PeerMsg) => {
@@ -389,6 +563,8 @@ export class MainMenu extends Component {
             this.state.mapIndex = d.mapIndex % MAPS.length;
             this.state.charP1 = d.charHost;
             this.state.charP2 = d.charGuest;
+            if (d.outfitHost) this.state.outfitP1 = d.outfitHost; // host's look
+            if (d.outfitGuest) this.state.outfitP2 = d.outfitGuest;
             this.state.lan = lan;
             this.lanClient = null;
             if (this.panelNode) { this.panelNode.destroy(); this.panelNode = null; }

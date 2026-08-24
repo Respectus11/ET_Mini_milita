@@ -68,6 +68,8 @@ export class GameRoot extends Component {
             twoPlayers: s.twoPlayers,
             charP1: s.charP1,
             charP2: s.charP2,
+            outfitP1: s.outfitP1,
+            outfitP2: s.outfitP2,
             netRole,
         };
 
@@ -239,6 +241,8 @@ export class GameRoot extends Component {
                     twoPlayers: opts.twoPlayers,
                     charP1: opts.charP1,
                     charP2: opts.charP2,
+                    outfitP1: opts.outfitP1,
+                    outfitP2: opts.outfitP2,
                     lan: null,
                 });
             }, new Color(46, 125, 50), 380, 96);

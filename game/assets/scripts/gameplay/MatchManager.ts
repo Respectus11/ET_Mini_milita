@@ -4,7 +4,7 @@ import { bus, Evt } from '../core/EventBus';
 import { CFG } from '../core/GameConfig';
 import { clamp, fmtTime } from '../core/Utils';
 import { ensureUT } from '../core/UIUtil';
-import { CHARACTERS, CharacterDef } from '../data/Characters';
+import { CHARACTERS, CharacterDef, OutfitOverride, resolveChar } from '../data/Characters';
 import { MAPS, MapDef } from '../data/Maps';
 import { WeaponId, WEAPONS, WEAPON_LIST } from '../data/Weapons';
 import { Fighter } from './Fighter';
@@ -22,6 +22,9 @@ export interface MatchOptions {
     twoPlayers: boolean;
     charP1: number;
     charP2: number;
+    /** Player-customized clothes/scarf/skin overrides (see Characters.ts). */
+    outfitP1?: OutfitOverride;
+    outfitP2?: OutfitOverride;
     /** LAN multiplayer role. 'host' simulates; 'guest' mirrors snapshots. */
     netRole?: NetRole;
 }
@@ -123,7 +126,9 @@ export class MatchManager extends Component {
             return f;
         };
 
-        const p1 = mk(CHARACTERS[this.opts.charP1 % CHARACTERS.length], false, 'P1');
+        // Human fighters wear the customized outfits chosen in the menu;
+        // resolveChar() merges overrides over the roster base colors.
+        const p1 = mk(resolveChar(this.opts.charP1, this.opts.outfitP1), false, 'P1');
         p1.giveWeapon(WEAPONS[WeaponId.RIFLE]);
         const s1 = this.safeSpawn('p');
         p1.spawnAt(s1[0], s1[1]);
@@ -131,7 +136,7 @@ export class MatchManager extends Component {
         this.humans.push(p1);
 
         if (this.opts.twoPlayers) {
-            const p2 = mk(CHARACTERS[this.opts.charP2 % CHARACTERS.length], false, 'P2');
+            const p2 = mk(resolveChar(this.opts.charP2, this.opts.outfitP2), false, 'P2');
             p2.giveWeapon(WEAPONS[WeaponId.RIFLE]);
             const s2 = this.safeSpawn('q');
             p2.spawnAt(s2[0], s2[1]);

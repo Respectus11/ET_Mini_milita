@@ -8,11 +8,15 @@
  * Uses the global WebSocket, which exists both in browsers and in Cocos
  * native builds, so the same code path works in preview and on Android.
  */
+import { OutfitOverride } from '../data/Characters';
 
 /** Peer-to-peer game payloads carried inside relay 'data' envelopes. */
 export type PeerMsg =
-    | { m: 'hello'; char: number }
-    | { m: 'start'; mapIndex: number; charHost: number; charGuest: number }
+    | { m: 'hello'; char: number; outfit?: OutfitOverride }
+    | {
+        m: 'start'; mapIndex: number; charHost: number; charGuest: number;
+        outfitHost?: OutfitOverride; outfitGuest?: OutfitOverride;
+      }
     | {
         m: 'input';
         mx: number; jet: boolean; drop: boolean;
