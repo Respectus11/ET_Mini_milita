@@ -16,6 +16,11 @@ tools/*
 !tools/tsc-check/
 !tools/fetch-creator.ps1
 
+# --- npm dependencies (tsc-check) ---
+# tools/tsc-check/ is whitelisted above, so re-ignore its installed deps;
+# package.json + package-lock.json remain tracked for reproducible installs.
+tools/tsc-check/node_modules/
+
 # --- Cocos Creator generated working files ---
 game/temp/
 game/library/
