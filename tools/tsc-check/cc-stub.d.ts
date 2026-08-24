@@ -12,6 +12,8 @@ declare module 'cc' {
     export type Graphics = any;
     export const Label: any;
     export type Label = any;
+    export const EditBox: any;
+    export type EditBox = any;
     export const UITransform: any;
     export type UITransform = any;
     export const Vec3: any;
@@ -38,4 +40,10 @@ declare module 'cc' {
     export type Touch = any;
     export const ResolutionPolicy: any;
     export type ResolutionPolicy = any;
+    export const EditBox: any;
+    export type EditBox = any;
 }
+
+declare const localStorage: { getItem(k: string): string | null; setItem(k: string, v: string): void; };
+declare const console: any;
+
