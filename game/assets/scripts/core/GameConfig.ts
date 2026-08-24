@@ -35,6 +35,15 @@ export const CFG = {
     MATCH_TIME: 240,         // match duration in seconds (4 minutes)
     CRATE_RESPAWN: 15,       // seconds for a taken weapon crate to reappear
 
+    // --- pickups ----------------------------------------------------------
+    ITEM_RESPAWN: 15,        // seconds for a taken pickup to reappear
+    SHIELD_HP: 60,           // damage absorbed by the mesob shield
+    SHIELD_TIME: 8,          // mesob shield duration cap (s)
+    BUNA_SPEED_MULT: 1.55,   // move-speed multiplier under buna effect
+    BUNA_JUMP_MULT: 1.35,    // reserved: jump boost multiplier (buna)
+    BUNA_TIME: 8,            // buna effect duration (s)
+    INJERA_HEAL: 40,         // HP restored by an injera pack
+
     // --- melee ------------------------------------------------------------
     MELEE_RANGE: 95,         // max reach of a melee swipe from body center (px)
     MELEE_DMG: 22,           // melee damage
