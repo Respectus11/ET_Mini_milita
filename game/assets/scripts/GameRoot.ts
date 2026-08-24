@@ -19,7 +19,6 @@ import { KeyboardControls } from './input/KeyboardControls';
 import { t } from './data/Strings';
 
 type Phase = 'MENU' | 'GAME' | 'RESULTS';
-
 @ccclass('GameRoot')
 export class GameRoot extends Component {
     private phase: Phase = 'MENU';
@@ -40,6 +39,10 @@ export class GameRoot extends Component {
         this.phase = 'MENU';
         this.clearGame();
         this.clearMenu();
+        if (this.lan) {
+            this.lan.disconnect();
+            this.lan = null;
+        }
 
         this.menuNode = new Node('menu');
         this.node.addChild(this.menuNode);
@@ -56,15 +59,31 @@ export class GameRoot extends Component {
         this.gameNode = new Node('game');
         this.node.addChild(this.gameNode);
 
+        const netRole = s.mode === 'netHost' ? 'host'
+            : s.mode === 'netGuest' ? 'guest' : 'off';
+
         const match = this.gameNode.addComponent(MatchManager);
         match.opts = {
             mapIndex: s.mapIndex,
             twoPlayers: s.twoPlayers,
             charP1: s.charP1,
             charP2: s.charP2,
+            netRole,
         };
 
         match.onEnd = (winnerId) => this.scheduleOnce(() => this.showResults(match, winnerId), 0.9);
+
+        // LAN wiring: route peer messages into the match, own lifecycle here
+        if (s.lan) {
+            this.lan = s.lan;
+            match.netSend = d => this.lan!.send(d);
+            this.lan.onData = d => {
+                if (this.phase === 'GAME') match.handlePeerMsg(d);
+            };
+            this.lan.onPeerGone = () => {
+                if (this.phase === 'GAME') this.showResults(match, null, t('opp_left'));
+            };
+        }
 
         // HUD
         const hudNode = new Node('hud');
@@ -77,7 +96,7 @@ export class GameRoot extends Component {
         this.node.addChild(inputNode);
         this.touch = inputNode.addComponent(TouchControls);
         this.touch.enabledP1 = true;
-        this.touch.enabledP2 = s.twoPlayers;
+        this.touch.enabledP2 = netRole === 'off' && s.twoPlayers;
         this.keys = inputNode.addComponent(KeyboardControls);
 
         // after match roster exists, wire everything
@@ -85,44 +104,75 @@ export class GameRoot extends Component {
         this.hud.build(match.fighters, () => this.showResults(match, null));
         this.hud.refresh();
 
-        this.touchApply = (f1, f2) => this.touch.applyTo(f1, f2);
-        this.keyboardApply = (f) => {
-            const world = match.world;
-            const ox = -world.worldW / 2;
-            const oy = -world.worldH / 2;
-            this.keys.applyTo(f, (x, y): [number, number] => [x + ox, y + oy]);
-        };
-        match.touchApply = (f1, f2) => this.touchApply!(f1, f2);
-        match.keyboardApply = (f) => this.keyboardApply!(f);
+        const world = match.world;
+        const ox = -world.worldW / 2;
+        const oy = -world.worldH / 2;
+        if (netRole === 'guest') {
+            // The guest controls humans[1] (its own fighter); inputs are
+            // relayed to the host instead of driving local physics.
+            const me = match.humans[1];
+            match.myFighterId = me.id;
+            this.touchApply = () => {
+                this.touch.applyTo(me, null);
+                match.guestFireTouch = this.touch.lastMagP1 > 0.3;
+            };
+            this.keyboardApply = f => {
+                void f;
+                this.keys.applyTo(me, (x, y): [number, number] => [x + ox, y + oy]);
+                match.guestFireKeys = this.keys.lastAimLen > 4 && this.keys.mouseDown;
+            };
+            match.touchApply = f1f2 => this.touchApply!(f1f2, null);
+            match.keyboardApply = f => this.keyboardApply!(f);
+        } else {
+            this.touchApply = (f1, f2) => {
+                this.touch.applyTo(f1, f2);
+                if (netRole === 'host') match.guestFireTouch = false;
+            };
+            this.keyboardApply = (f) => {
+                this.keys.applyTo(f, (x, y): [number, number] => [x + ox, y + oy]);
+            };
+            match.touchApply = (f1, f2) => this.touchApply!(f1, f2);
+            match.keyboardApply = (f) => this.keyboardApply!(f);
+        }
 
         this.matchRef = match;
         this.schedule(this.gameTick, 0);
     }
 
     private matchRef: MatchManager = null!;
+    private lan: import('./net/LanClient').LanClient | null = null;
     private touchApply: ((f1: any, f2: any) => void) | null = null;
     private keyboardApply: ((f: any) => void) | null = null;
 
     private gameTick() {
         if (!this.matchRef || this.phase !== 'GAME') return;
+        const match = this.matchRef;
         this.hud.refresh();
-        const p1 = this.matchRef.humans[0];
-        if (p1) {
-            const w = p1.weapon;
-            const ammoTxt = p1.reloading ? '...' : `${p1.ammo}/${w.magSize}`;
-            this.hud.setAmmo(`${t(w.nameKey)}  ${ammoTxt}`);
+        // HUD reflects the fighter the LOCAL player controls
+        const me = match.fighters.find(f => f.id === match.myFighterId)
+            ?? match.humans[0];
+        if (me) {
+            if (!me.alive) {
+                this.hud.setAmmo('');
+            } else {
+                const w = me.weapon;
+                const ammoTxt = me.reloading ? '...' : `${me.ammo}/${w.magSize}`;
+                this.hud.setAmmo(`${t(w.nameKey)}  ${ammoTxt}`);
+            }
         }
         let scoreStr = '';
-        for (let i = 1; i < this.matchRef.fighters.length; i++) {
-            const f = this.matchRef.fighters[i];
-            scoreStr += `: ${this.matchRef.scoreOf(f.id)} `;
+        for (let i = 1; i < match.fighters.length; i++) {
+            const f = match.fighters[i];
+            scoreStr += `: ${match.scoreOf(f.id)} `;
         }
-        this.hud.setScores(this.matchRef.scoreOf(this.matchRef.fighters[0].id),
-            scoreStr.trim(), this.matchRef.timeStr());
+        const leader = match.fighters.find(f => f.id === match.myFighterId)
+            ?? match.fighters[0];
+        this.hud.setScores(match.scoreOf(leader.id),
+            scoreStr.trim(), match.timeStr());
     }
 
     // ---------- RESULTS ----------
-    private showResults(match: MatchManager, winnerId: number | null) {
+    private showResults(match: MatchManager, winnerId: number | null, titleOverride?: string) {
         if (this.phase !== 'GAME') return;
         this.unschedule(this.gameTick);
         this.phase = 'RESULTS';
@@ -138,10 +188,17 @@ export class GameRoot extends Component {
         g.fill();
 
         const winner = match.fighters.find(f => f.id === winnerId);
-        let titleKey = 'you_lose';
-        if (!winner) titleKey = 'paused';
-        else if (match.opts.twoPlayers) titleKey = winner.teamLabel === 'P1' ? 'p1_wins' : 'p2_wins';
-        else if (winner.teamLabel === 'P1') titleKey = 'you_win';
+        const isNet = match.opts.netRole !== undefined && match.opts.netRole !== 'off';
+        let titleKey = titleOverride ?? 'you_lose';
+        if (!winner) {
+            titleKey = titleOverride ?? 'paused';
+        } else if (isNet) {
+            titleKey = winner.id === match.myFighterId ? 'you_win' : 'you_lose';
+        } else if (match.opts.twoPlayers) {
+            titleKey = winner.teamLabel === 'P1' ? 'p1_wins' : 'p2_wins';
+        } else if (winner.teamLabel === 'P1') {
+            titleKey = 'you_win';
+        }
 
         const tn = new Node('title');
         rn.addChild(tn);
@@ -165,21 +222,37 @@ export class GameRoot extends Component {
         sl.lineHeight = 54;
         sn.setPosition(0, 60, 0);
 
-        this.resultButton(rn, -260, -180, t('rematch'), () => {
-            const opts = match.opts;
-            rn.destroy();
-            this.startMatch({
-                mapIndex: opts.mapIndex,
-                twoPlayers: opts.twoPlayers,
-                charP1: opts.charP1,
-                charP2: opts.charP2,
-            });
-        }, new Color(46, 125, 50), 380, 96);
+        const netMatch = match.opts.netRole !== undefined && match.opts.netRole !== 'off';
+        if (netMatch) {
+            // No instant rematch over LAN — return to the room via the menu.
+            this.resultButton(rn, 0, -180, t('menu'), () => {
+                rn.destroy();
+                this.leaveNetAndShowMenu();
+            }, new Color(62, 74, 96), 380, 96);
+        } else {
+            this.resultButton(rn, -260, -180, t('rematch'), () => {
+                const opts = match.opts;
+                rn.destroy();
+                this.startMatch({
+                    mode: opts.twoPlayers ? 'local' : 'bots',
+                    mapIndex: opts.mapIndex,
+                    twoPlayers: opts.twoPlayers,
+                    charP1: opts.charP1,
+                    charP2: opts.charP2,
+                    lan: null,
+                });
+            }, new Color(46, 125, 50), 380, 96);
 
-        this.resultButton(rn, 260, -180, t('menu'), () => {
-            rn.destroy();
-            this.showMenu();
-        }, new Color(62, 74, 96), 380, 96);
+            this.resultButton(rn, 260, -180, t('menu'), () => {
+                rn.destroy();
+                this.showMenu();
+            }, new Color(62, 74, 96), 380, 96);
+        }
+    }
+
+    /** Tears down any live LAN session and rebuilds the main menu. */
+    private leaveNetAndShowMenu() {
+        this.showMenu();
     }
 
     private resultButton(parent: Node, x: number, y: number, text: string,
