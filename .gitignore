@@ -1,0 +1,36 @@
+# ============================================================
+# ET_Mini_Militia — Git ignore policy
+# ------------------------------------------------------------
+# reference/ : extracted/decompiled contents of the commercial
+#              Mini Militia XAPK. Copyrighted material — never
+#              redistribute. Kept local for study only.
+# tools/     : third-party binaries & multi-hundred-MB editor
+#              downloads (apktool.jar, jadx, CocosCreator zip).
+# ============================================================
+
+# --- copyrighted reference material (never publish) ---
+reference/
+
+# --- heavy toolchain binaries ---
+tools/*
+!tools/tsc-check/
+!tools/fetch-creator.ps1
+
+# --- Cocos Creator generated working files ---
+game/temp/
+game/library/
+game/build/
+game/local/
+game/profiles/
+game/extensions/
+
+# --- OS / editor cruft ---
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.log
+
+# --- archives ---
+*.zip
+*.xapk
+*.apk
