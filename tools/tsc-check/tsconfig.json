@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+        "target": "ES2018",
+        "module": "CommonJS",
+        "strict": false,
+        "experimentalDecorators": true,
+        "skipLibCheck": true,
+        "noEmit": true,
+        "types": []
+    },
+    "include": [
+        "../../game/assets/scripts/**/*.ts",
+        "./cc-stub.d.ts"
+    ]
+}
