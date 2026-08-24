@@ -6,7 +6,7 @@ import { clamp, fmtTime } from '../core/Utils';
 import { ensureUT } from '../core/UIUtil';
 import { CHARACTERS, CharacterDef } from '../data/Characters';
 import { MAPS, MapDef } from '../data/Maps';
-import { WeaponId, WEAPONS } from '../data/Weapons';
+import { WeaponId, WEAPONS, WEAPON_LIST } from '../data/Weapons';
 import { Fighter } from './Fighter';
 import { PickupItem } from './PickupItem';
 import { WeaponCrate } from './WeaponCrate';
@@ -217,6 +217,7 @@ export class MatchManager extends Component {
             const ang = baseAng + (Math.random() - 0.5) * (w.spreadDeg * Math.PI / 180);
             const col = w.id === WeaponId.LAUNCHER ? new Color(255, 120, 40)
                 : w.id === WeaponId.SNIPER ? new Color(140, 255, 140)
+                : w.id === WeaponId.SMG ? new Color(150, 235, 255)
                 : new Color(255, 240, 120);
             this.projectiles.spawn(f.id, muzzleX, muzzleY, ang,
                 w.speed * (0.95 + Math.random() * 0.1), w, col);
@@ -310,6 +311,7 @@ export class MatchManager extends Component {
                 rl: f.reloading ? 1 : 0,
                 sp: Math.round(f.speedT),
                 sh: Math.round(f.shieldHp),
+                wp: WEAPON_LIST.indexOf(f.weapon.id),
             })),
             ps: this.projectiles.liveCoords(),
         };

@@ -10,14 +10,17 @@ const { ccclass } = _decorator;
 import { CFG } from '../core/GameConfig';
 import { Fighter } from './Fighter';
 import { pick } from '../core/Utils';
-import { WeaponId, WEAPONS } from '../data/Weapons';
+import { CRATE_POOL, WeaponId, WEAPONS } from '../data/Weapons';
 import { ensureUT } from '../core/UIUtil';
+import { weaponAccent } from './GunArt';
 
 @ccclass('WeaponCrate')
 export class WeaponCrate extends Component {
     x = 0; y = 0;
     taken = false;
     respawnT = 0;
+    /** Weapon this crate will drop — rolled on spawn so its ring can advertise it. */
+    loot: WeaponId = WeaponId.RIFLE;
 
     private g: Graphics = null!;
 
@@ -25,6 +28,7 @@ export class WeaponCrate extends Component {
         this.x = x; this.y = y;
         this.taken = false;
         this.respawnT = 0;
+        this.rollLoot();
         ensureUT(this.node);
         if (!this.g) this.g = this.node.addComponent(Graphics);
         this.node.setPosition(x, y, 0);
@@ -32,35 +36,43 @@ export class WeaponCrate extends Component {
         this.draw();
     }
 
-    /** Ring + bullet pictogram with a gentle idle bob. */
+    /** Pick (or re-pick after respawn) the crate's advertised weapon. */
+    private rollLoot() {
+        this.loot = pick(CRATE_POOL);
+    }
+
+    /** Ring + bullet pictogram tinted with the loot weapon's accent. */
     private draw() {
         const g = this.g;
         g.clear();
         const bob = Math.sin(Date.now() / 300 + this.x) * 3;
+        const acc = weaponAccent(WEAPONS[this.loot]);
 
         g.lineWidth = 3.5;
-        g.strokeColor = new Color(255, 202, 40);
+        g.strokeColor = acc;
         g.circle(0, 26 + bob, 22);
         g.stroke();
-        g.fillColor = new Color(255, 202, 40, 55);
+        const glow = new Color(acc.r, acc.g, acc.b, 55);
+        g.fillColor = glow;
         g.circle(0, 26 + bob, 28);
         g.fill();
 
         // bullet shape
-        g.fillColor = new Color(255, 202, 40);
+        g.fillColor = Color.WHITE;
         g.roundRect(-3, 20 + bob, 6, 13, 2); g.fill();
         g.circle(0, 33 + bob, 3); g.fill();
-        g.rect(-7, 18 + bob, 14, 3); g.fill();
+        // tiny weapon-silhouette bar under the bullet
+        g.fillColor = acc;
+        g.rect(-8, 17 + bob, 16, 3.5);
+        g.fill();
     }
 
-    /** Grants the toucher a random full-magazine weapon. */
+    /** Grants the crate's rolled weapon with a full magazine. */
     tryTake(f: Fighter): boolean {
         if (this.taken || !f.alive) return false;
         const dx = f.x - this.x, dy = f.y - (this.y + 26);
         if (Math.abs(dx) > 46 || Math.abs(dy) > 60) return false;
-        f.giveWeapon(WEAPONS[pick([
-            WeaponId.RIFLE, WeaponId.SHOTGUN, WeaponId.SNIPER, WeaponId.LAUNCHER,
-        ])]);
+        f.giveWeapon(WEAPONS[this.loot]);
         this.taken = true;
         this.respawnT = CFG.CRATE_RESPAWN;
         this.node.active = false;
@@ -72,6 +84,7 @@ export class WeaponCrate extends Component {
         this.respawnT -= dt;
         if (this.respawnT <= 0) {
             this.taken = false;
+            this.rollLoot();
             this.node.active = true;
             this.draw();
         }

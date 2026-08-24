@@ -17,7 +17,8 @@ import { CFG } from '../core/GameConfig';
 import { clamp } from '../core/Utils';
 import { ensureUT } from '../core/UIUtil';
 import { CharacterDef } from '../data/Characters';
-import { WeaponDef, WeaponId, WEAPONS } from '../data/Weapons';
+import { WeaponDef, WEAPONS, WeaponId } from '../data/Weapons';
+import { drawGun, weaponByIndex } from './GunArt';
 import { TileWorld } from '../world/TileWorld';
 import { bus, Evt } from '../core/EventBus';
 
@@ -81,6 +82,11 @@ export class Fighter extends Component {
 
     private g: Graphics | null = null;
     private bodyG: Graphics = null!;
+    private gunNode: Node = null!;
+    private gunG: Graphics = null!;
+    private muzzleT = 0;              // counts down the flash/kick window
+    private static FLASH_T = 0.07;
+    private gunBaseX = 0;
 
     init(char: CharacterDef, world: TileWorld) {
         this.char = char;
@@ -89,6 +95,16 @@ export class Fighter extends Component {
         ensureUT(this.node);
         this.bodyG = this.node.addComponent(Graphics);
         this.drawSelf();
+
+        // dedicated layer so gun redraws never touch body vector ops
+        ensureUT(this.node);
+        this.gunNode = new Node('gun');
+        this.node.addChild(this.gunNode);
+        ensureUT(this.gunNode);
+        this.gunG = this.gunNode.addComponent(Graphics);
+        this.gunBaseX = this.w * 0.06;
+        this.gunNode.setPosition(this.gunBaseX, -this.h * 0.02, 0);
+        this.drawGunLayer(0);
     }
 
     private drawSelf() {
@@ -172,8 +188,24 @@ export class Fighter extends Component {
         this.weapon = def;
         this.ammo = def.magSize;
         this.reloading = false;
+        this.drawGunLayer(this.muzzleT > 0 ? this.muzzleT / Fighter.FLASH_T : 0);
         bus.emit(Evt.WEAPON_CHANGED, this.id, def.id);
         bus.emit(Evt.AMMO_CHANGED, this.id, this.ammo, def.magSize);
+    }
+
+    /** Swap only the art/wire weapon — keeps live ammo & reload state. */
+    setWeaponVisual(def: WeaponDef) {
+        if (this.weapon.id === def.id) return;
+        this.weapon = def;
+        this.drawGunLayer(0);
+    }
+
+    /** Redraws the gun layer; flash01 (0..1] adds the muzzle star + kick. */
+    private drawGunLayer(flash01: number) {
+        if (!this.gunG || !this.weapon.visual) return;
+        drawGun(this.gunG, this.weapon, flash01);
+        const kick = flash01 * 6;
+        this.gunNode.setPosition(this.gunBaseX - kick, -this.h * 0.02, 0);
     }
 
     startReload() {
@@ -192,6 +224,7 @@ export class Fighter extends Component {
         this.ammo--;
         this.fireCd = 1 / this.weapon.rof;
         this.vx -= this.faceDir * this.weapon.recoil * 0.15;
+        this.muzzleT = Fighter.FLASH_T;
         bus.emit(Evt.AMMO_CHANGED, this.id, this.ammo, this.weapon.magSize);
         if (this.onShoot) this.onShoot(this);
         if (this.ammo <= 0) this.startReload();
@@ -247,6 +280,11 @@ export class Fighter extends Component {
         if (this.fireCd > 0) this.fireCd -= dt;
         if (this.meleeCd > 0) this.meleeCd -= dt;
         if (this.invuln > 0) this.invuln -= dt;
+        if (this.muzzleT > 0) {
+            this.muzzleT = Math.max(0, this.muzzleT - dt);
+            this.drawGunLayer(this.muzzleT / Fighter.FLASH_T);
+            if (this.muzzleT === 0) this.drawGunLayer(0); // clean idle pose
+        }
         if (this.reloading) {
             this.reloadT -= dt;
             if (this.reloadT <= 0) {
@@ -273,7 +311,8 @@ export class Fighter extends Component {
      * Visual-only — physics/AI never run on remote-view fighters.
      */
     applyNetState(s: { x: number; y: number; fc: number; hp: number; fu: number;
-                        al: number; am: number; rl: number; sp: number; sh: number }) {
+                        al: number; am: number; rl: number; sp: number;
+                        sh: number; wp?: number }) {
         const wasAlive = this.alive;
         this.x = s.x; this.y = s.y;
         this.faceDir = s.fc;
@@ -282,6 +321,7 @@ export class Fighter extends Component {
         this.ammo = s.am;
         this.reloading = !!s.rl;
         this.speedT = s.sp;
+        if (s.wp !== undefined) this.setWeaponVisual(weaponByIndex(s.wp));
         const shieldChanged = this.shieldHp !== s.sh;
         this.shieldHp = s.sh;
         this.alive = !!s.al;

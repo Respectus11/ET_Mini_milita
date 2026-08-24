@@ -40,6 +40,7 @@ export interface NetFighterState {
     rl: number;  // reloading 1/0
     sp: number;  // buna speed timer remaining
     sh: number;  // shield hp remaining
+    wp?: number; // weapon index into WEAPON_LIST
 }
 
 export type RelayMsg =

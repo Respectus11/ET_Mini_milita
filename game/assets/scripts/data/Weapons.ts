@@ -14,6 +14,7 @@ export enum WeaponId {
     SHOTGUN = 'shotgun',
     SNIPER = 'sniper',
     LAUNCHER = 'launcher',
+    SMG = 'smg',
 }
 
 export interface WeaponDef {
@@ -30,6 +31,25 @@ export interface WeaponDef {
     splashRadius: number; // explosion radius; 0 = single-target hit
     recoil: number;       // self-knockback impulse on firing
     auto: boolean;        // true = hold to keep firing
+    visual: GunVisual;    // how the held gun + crate tint are drawn
+}
+
+/**
+ * Vector-art recipe for one weapon, consumed by GunArt.drawGun.
+ * Colors are 0xRRGGBB; geometry is in fighter-local px pointing +X
+ * (the fighter node mirrors itself, so art never worries about facing).
+ */
+export interface GunVisual {
+    body: number;       // receiver/barrel color
+    accent: number;     // trim color (also tints the weapon crate ring)
+    barrelLen: number;  // barrel length from receiver front (px)
+    barrelH: number;    // barrel thickness (px)
+    stock: boolean;     // shoulder stock behind the grip
+    mag: boolean;       // box magazine under the receiver
+    scope: boolean;     // scope tube on top
+    pump: boolean;      // wood pump handle under the barrel
+    tube: boolean;      // fat launcher tube instead of a thin barrel
+    flashSize: number;  // muzzle-flash star radius (px)
 }
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
@@ -39,6 +59,12 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
         dmg: 12, pellets: 1, rof: 8, spreadDeg: 2.5, speed: 1500,
         magSize: 30, reloadTime: 1.4, gravityScale: 0,
         splashRadius: 0, recoil: 40, auto: true,
+        visual: {
+            body: 0x4a3b2a, accent: 0xffb300,
+            barrelLen: 34, barrelH: 7,
+            stock: true, mag: true, scope: false, pump: false, tube: false,
+            flashSize: 12,
+        },
     },
     // Close-range burst — six pellets, brutal inside melee range.
     [WeaponId.SHOTGUN]: {
@@ -46,6 +72,12 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
         dmg: 8, pellets: 6, rof: 1.3, spreadDeg: 13, speed: 1150,
         magSize: 6, reloadTime: 1.9, gravityScale: 0.15,
         splashRadius: 0, recoil: 260, auto: false,
+        visual: {
+            body: 0x6d4a2f, accent: 0xff7043,
+            barrelLen: 30, barrelH: 9,
+            stock: true, mag: false, scope: false, pump: true, tube: false,
+            flashSize: 15,
+        },
     },
     // Long-range punisher — huge damage, slow cycle, zero spread.
     [WeaponId.SNIPER]: {
@@ -53,6 +85,12 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
         dmg: 55, pellets: 1, rof: 0.85, spreadDeg: 0, speed: 2800,
         magSize: 5, reloadTime: 2.1, gravityScale: 0,
         splashRadius: 0, recoil: 180, auto: false,
+        visual: {
+            body: 0x23262e, accent: 0x39d6ff,
+            barrelLen: 42, barrelH: 5,
+            stock: true, mag: false, scope: true, pump: false, tube: false,
+            flashSize: 10,
+        },
     },
     // Arcing explosive — rewards roof-spamming and door denial.
     [WeaponId.LAUNCHER]: {
@@ -60,5 +98,36 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
         dmg: 42, pellets: 1, rof: 1.0, spreadDeg: 2, speed: 880,
         magSize: 4, reloadTime: 2.3, gravityScale: 1,
         splashRadius: 130, recoil: 150, auto: false,
+        visual: {
+            body: 0x55603a, accent: 0xd23b2f,
+            barrelLen: 26, barrelH: 14,
+            stock: false, mag: false, scope: false, pump: false, tube: true,
+            flashSize: 18,
+        },
+    },
+    // Room-sprayer — huge mag, tiny punch, shreds at close range.
+    [WeaponId.SMG]: {
+        id: WeaponId.SMG, nameKey: 'w_smg',
+        dmg: 8, pellets: 1, rof: 13, spreadDeg: 5, speed: 1250,
+        magSize: 36, reloadTime: 1.1, gravityScale: 0,
+        splashRadius: 0, recoil: 22, auto: true,
+        visual: {
+            body: 0x37474f, accent: 0x26c6da,
+            barrelLen: 20, barrelH: 8,
+            stock: false, mag: true, scope: false, pump: false, tube: false,
+            flashSize: 9,
+        },
     },
 };
+
+/** Stable index order for LAN snapshots (weapon id -> wire index). */
+export const WEAPON_LIST: WeaponId[] = [
+    WeaponId.RIFLE, WeaponId.SHOTGUN, WeaponId.SNIPER,
+    WeaponId.LAUNCHER, WeaponId.SMG,
+];
+
+/** Crates roll from this pool (weights emerge from repetition). */
+export const CRATE_POOL: WeaponId[] = [
+    WeaponId.RIFLE, WeaponId.RIFLE, WeaponId.SHOTGUN,
+    WeaponId.SMG, WeaponId.SMG, WeaponId.SNIPER, WeaponId.LAUNCHER,
+];
