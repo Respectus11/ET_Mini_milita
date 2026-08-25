@@ -8,6 +8,7 @@
  * Uses the global WebSocket, which exists both in browsers and in Cocos
  * native builds, so the same code path works in preview and on Android.
  */
+import { loadStr, saveStr } from '../core/Storage';
 import { OutfitOverride } from '../data/Characters';
 
 /** Peer-to-peer game payloads carried inside relay 'data' envelopes. */
@@ -210,12 +211,10 @@ export class LanClient {
 
     /** Default relay address persisted between sessions. */
     static savedRelay(): string {
-        try {
-            return localStorage.getItem('etmm_relay') || 'ws://192.168.1.10:9420';
-        } catch { return 'ws://192.168.1.10:9420'; }
+        return loadStr('etmm_relay') || 'ws://192.168.1.10:9420';
     }
 
     static saveRelay(url: string) {
-        try { localStorage.setItem('etmm_relay', url); } catch { /* noop */ }
+        saveStr('etmm_relay', url);
     }
 }
