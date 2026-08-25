@@ -12,22 +12,31 @@ import { CFG } from '../core/GameConfig';
 import { fmtTime } from '../core/Utils';
 import { t } from '../data/Strings';
 import { Fighter } from '../gameplay/Fighter';
-import { ensureUT } from '../core/UIUtil';
+import { ensureUT, coverSize } from '../core/UIUtil';
 
 @ccclass('GameHUD')
 export class GameHUD extends Component {
     private fighters: Fighter[] = [];
-    private hpBars: { g: Graphics; f: Fighter; x: number }[] = [];
+    /** Cached per-fighter panel: graphics + name label (no per-frame lookups). */
+    private panels: { g: Graphics; f: Fighter; label: Label }[] = [];
     private scoreLbl!: Label;
     private timeLbl!: Label;
     private ammoLbl!: Label;
     private msgLbl!: Label;
     private onPause: (() => void) | null = null;
 
+    // reusable colors — refreshed() repaints every frame, so allocate once
+    private readonly cPanelBg = new Color(0, 0, 0, 150);
+    private readonly cHpHigh = new Color(76, 217, 100);
+    private readonly cHpMid = new Color(255, 200, 60);
+    private readonly cHpLow = new Color(240, 80, 80);
+    private readonly cFuelBg = new Color(0, 0, 0, 120);
+    private readonly cFuel = new Color(90, 190, 255);
+
     build(fighters: Fighter[], onPause: () => void) {
         this.fighters = fighters;
         this.onPause = onPause;
-        const W = 1920;
+        const W = coverSize().w;
 
         // top bar
         const bar = new Node('topbar');
@@ -39,7 +48,7 @@ export class GameHUD extends Component {
         bg.fill();
 
         // per-player panels
-        this.hpBars = [];
+        this.panels = [];
         let x = -W / 2 + 30;
         for (const f of fighters) {
             const n = new Node('panel_' + f.teamLabel);
@@ -47,15 +56,16 @@ export class GameHUD extends Component {
             n.setPosition(x + 150, 510, 0);
             ensureUT(n);
             const g = n.addComponent(Graphics);
-            this.hpBars.push({ g, f, x });
             const lblN = new Node('nm');
             n.addChild(lblN);
             ensureUT(lblN);
             const l = lblN.addComponent(Label);
             l.string = '';
-            l.fontSize = 22;
-            l.lineHeight = 24;
-            l.color = new Color(255, 255, 255);
+            l.fontSize = 24;
+            l.lineHeight = 26;
+            // fighter names are tinted once — the look is fixed per match
+            l.color = new Color(f.char.body.r, f.char.body.g, f.char.body.b);
+            this.panels.push({ g, f, label: l });
             x += 330;
         }
 
@@ -76,9 +86,9 @@ export class GameHUD extends Component {
         this.node.addChild(tN);
         ensureUT(tN);
         this.timeLbl = tN.addComponent(Label);
-        this.timeLbl.fontSize = 34;
-        this.timeLbl.lineHeight = 38;
-        this.timeLbl.color = new Color(220, 220, 220);
+        this.timeLbl.fontSize = 26;
+        this.timeLbl.lineHeight = 30;
+        this.timeLbl.color = new Color(225, 228, 235);
         tN.setPosition(0, 470, 0);
 
         // bottom-right: ammo
@@ -86,8 +96,8 @@ export class GameHUD extends Component {
         this.node.addChild(aN);
         ensureUT(aN);
         this.ammoLbl = aN.addComponent(Label);
-        this.ammoLbl.fontSize = 30;
-        this.ammoLbl.lineHeight = 34;
+        this.ammoLbl.fontSize = 28;
+        this.ammoLbl.lineHeight = 32;
         this.ammoLbl.color = new Color(255, 255, 160);
         aN.setPosition(W / 2 - 140, -470, 0);
 
@@ -112,9 +122,9 @@ export class GameHUD extends Component {
         this.node.addChild(mN);
         ensureUT(mN);
         this.msgLbl = mN.addComponent(Label);
-        this.msgLbl.fontSize = 54;
+        this.msgLbl.fontSize = 52;
         this.msgLbl.isBold = true;
-        this.msgLbl.lineHeight = 60;
+        this.msgLbl.lineHeight = 58;
         mN.setPosition(0, 260, 0);
     }
 
@@ -124,34 +134,32 @@ export class GameHUD extends Component {
     }
 
     refresh() {
-        for (const hb of this.hpBars) {
-            const f = hb.f;
-            const g = hb.g;
+        for (const p of this.panels) {
+            const f = p.f;
+            const g = p.g;
             g.clear();
-            // name
-            const lblNode = hb.g.node.getChildByName('nm')!;
-            const l = lblNode.getComponent(Label)!;
-            l.string = `${t(f.char.nameKey)}  ${f.teamLabel === 'P1' || f.teamLabel === 'P2' ? '' : '(BOT)'}`;
-            l.color = new Color(f.char.body.r, f.char.body.g, f.char.body.b);
+            // name (cached label — only rewritten when the text changes)
+            const txt = `${t(f.char.nameKey)}  ${f.teamLabel === 'P1' || f.teamLabel === 'P2' ? '' : '(BOT)'}`;
+            if (p.label.string !== txt) p.label.string = txt;
 
             // HP bar
             const w = 240, h = 18;
-            g.fillColor = new Color(0, 0, 0, 150);
+            g.fillColor = this.cPanelBg;
             g.roundRect(-w / 2, 8, w, h, 6);
             g.fill();
             const frac = Math.max(0, f.hp / CFG.MAX_HP);
-            g.fillColor = frac > 0.5 ? new Color(76, 217, 100)
-                : frac > 0.25 ? new Color(255, 200, 60) : new Color(240, 80, 80);
+            g.fillColor = frac > 0.5 ? this.cHpHigh
+                : frac > 0.25 ? this.cHpMid : this.cHpLow;
             if (frac > 0) {
                 g.roundRect(-w / 2 + 2, 10, (w - 4) * frac, h - 4, 4);
                 g.fill();
             }
             // fuel bar under it
             const ffrac = f.fuel / CFG.JETPACK_MAX_FUEL;
-            g.fillColor = new Color(0, 0, 0, 120);
+            g.fillColor = this.cFuelBg;
             g.roundRect(-w / 2, -16, w, 9, 3);
             g.fill();
-            g.fillColor = new Color(90, 190, 255);
+            g.fillColor = this.cFuel;
             if (ffrac > 0.01) {
                 g.roundRect(-w / 2 + 1, -15, (w - 2) * ffrac, 7, 2.5);
                 g.fill();
