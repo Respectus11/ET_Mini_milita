@@ -91,8 +91,8 @@ export class PickupItem extends Component {
         // letter hint below pad
         this.iconNode.setPosition(0, -14, 0);
         this.iconLbl.string = this.kind.toUpperCase().slice(0, 4);
-        this.iconLbl.fontSize = 16;
-        this.iconLbl.lineHeight = 18;
+        this.iconLbl.fontSize = 22;
+        this.iconLbl.lineHeight = 24;
         this.iconLbl.isBold = true;
         this.iconLbl.color = new Color(255, 255, 255, 190);
     }
