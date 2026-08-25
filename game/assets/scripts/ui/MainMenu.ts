@@ -598,21 +598,75 @@ export class MainMenu extends Component {
         const g = this.mapPreview;
         g.clear();
         const m = this.mapDef();
+
+        // Miniature of the REAL arena: 30x16 grid drawn at 8px per tile
+        // (240x128), so the preview always matches what you'll play.
+        const C = 8;
+        const cols = m.rows[0]?.length ?? 30;
+        const rowsN = m.rows.length;
+        const x0 = -380, y0 = -10;
+
+        // sky
         g.fillColor = m.skyTop;
-        g.roundRect(-380, -10, 240, 130, 12);
+        g.roundRect(x0, y0, cols * C, rowsN * C, RADIUS.sm);
         g.fill();
-        g.fillColor = m.tileFill;
-        g.rect(-350, 20, 60, 100);
+        g.fillColor = new Color(m.skyBottom.r, m.skyBottom.g, m.skyBottom.b, 120);
+        g.roundRect(x0, y0, cols * C, rowsN * C * 0.45, RADIUS.sm);
         g.fill();
-        g.rect(-270, -10, 80, 130);
-        g.fill();
-        g.rect(-170, 45, 55, 75);
-        g.fill();
-        g.fillColor = m.decoColor;
-        g.rect(-350, 112, 60, 9);
-        g.fill();
-        g.rect(-170, 112, 55, 9);
-        g.fill();
+
+        // tiles + markers, row 0 of the ASCII art is the TOP row
+        for (let r = 0; r < rowsN; r++) {
+            const line = m.rows[r] || '';
+            for (let c = 0; c < line.length; c++) {
+                const ch = line[c];
+                const px = x0 + c * C;
+                const py = y0 + (rowsN - 1 - r) * C;
+                switch (ch) {
+                    case '#':
+                        g.fillColor = m.tileFill;
+                        g.rect(px, py, C, C);
+                        g.fill();
+                        break;
+                    case '-':
+                        g.fillColor = m.tileEdge;
+                        g.rect(px, py + C - 3, C, 3);
+                        g.fill();
+                        break;
+                    case 'P':
+                    case 'Q':
+                        g.fillColor = ch === 'P' ? new Color(76, 217, 100)
+                            : new Color(240, 80, 80);
+                        g.circle(px + C / 2, py + C / 2, 4);
+                        g.fill();
+                        break;
+                    case 'E':
+                        g.fillColor = new Color(255, 255, 255, 110);
+                        g.circle(px + C / 2, py + C / 2, 3);
+                        g.fill();
+                        break;
+                    case 'W':
+                        g.fillColor = new Color(255, 193, 7);
+                        g.rect(px + 1, py + 1, C - 2, C - 2);
+                        g.fill();
+                        break;
+                    case 'B':
+                    case 'I':
+                    case 'M':
+                        g.fillColor = ch === 'B' ? new Color(160, 100, 40)
+                            : ch === 'I' ? new Color(214, 204, 186)
+                            : new Color(64, 196, 255);
+                        g.circle(px + C / 2, py + C / 2, 3.5);
+                        g.fill();
+                        break;
+                }
+            }
+        }
+
+        // frame
+        g.lineWidth = 2;
+        g.strokeColor = new Color(255, 255, 255, 40);
+        g.roundRect(x0, y0, cols * C, rowsN * C, RADIUS.sm);
+        g.stroke();
     }
 
     // ---- widget helpers ----
