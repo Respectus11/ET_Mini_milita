@@ -24,14 +24,22 @@ Creator 3.8**, the same engine family as the original game.
 ## Quick start
 
 1. Install [Cocos Creator 3.8.x](https://www.cocos.com/en/creator-download)
-   via Cocos Dashboard.
+   via Cocos Dashboard (not bundled with the repo).
 2. Open this repo's `game/` folder as a project.
-3. Create an empty scene (`assets/main.scene`), select any node under the
-   Canvas, and add the **GameRoot** component.
-4. Press Play. Desktop testing uses WASD + mouse; touch devices get the
-   dual-stick overlay automatically.
+3. Open `assets/main.scene` — a GameRoot node is already wired up. Press Play.
+4. Desktop preview uses WASD + mouse; touch devices get the dual-stick
+   overlay automatically. Phones are the primary target — see
+   [`BUILD.md`](BUILD.md) for the Android build and on-device LAN play.
 
-Full Android build instructions live in [`BUILD.md`](BUILD.md).
+## Type-checking without the editor
+
+```
+cd tools/tsc-check && npm install
+..\node_modules\.bin\tsc.cmd -p tsconfig.json --noEmit
+```
+
+The harness ships a typed `cc` stub, so typos and missing fields in
+gameplay classes are caught outside the editor.
 
 ## Controls (touch)
 
@@ -53,13 +61,14 @@ game/assets/scripts/
   gameplay/           Fighter, ProjectileSystem, WeaponCrate, MatchManager
   ai/                 bot FSM brain
   input/              dual-stick touch + desktop keyboard/mouse
+  net/                LanClient for LAN rooms (relay protocol)
   ui/                 code-built main menu and HUD
-tools/tsc-check/      standalone TypeScript sanity harness (cc module stubbed)
+tools/lan-relay.mjs   zero-dependency LAN room relay (node tools/lan-relay.mjs)
+tools/tsc-check/      standalone TypeScript sanity harness (typed cc stub)
 ```
 
 ## Roadmap
 
 - Hand-drawn sprite atlases replacing the procedural Graphics look
-- LAN multiplayer rooms over WebSockets
-- Team modes, more bots per match, persistent player profile
 - Sound effects and music wired through the existing event bus
+- Team modes, more bots per match, ranked scoring persistence
