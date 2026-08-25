@@ -6,12 +6,13 @@
  * Roster entries are BASE looks only; players may override the clothes,
  * scarf and skin colors per save slot (like the original game's avatar
  * customization). Overrides are plain hex strings so they serialize
- * directly to localStorage and over the LAN relay.
+ * directly to persistent storage and over the LAN relay.
  *
  * Names are common Ethiopian personal names; add matching strings to both
  * language tables in data/Strings.ts when adding a character here.
  */
 import { Color } from 'cc';
+import { loadStr, saveStr } from '../core/Storage';
 
 export interface CharacterDef {
     id: string;
@@ -48,8 +49,8 @@ const OUTFIT_KEY: Record<'p1' | 'p2', string> = {
 
 /** Restores this slot's saved customization (empty override if none). */
 export function loadOutfit(slot: 'p1' | 'p2'): OutfitOverride {
+    const raw = loadStr(OUTFIT_KEY[slot]);
     try {
-        const raw = localStorage.getItem(OUTFIT_KEY[slot]);
         const o = raw ? JSON.parse(raw) : {};
         return (o && typeof o === 'object') ? o as OutfitOverride : {};
     } catch { return {}; }
@@ -57,8 +58,7 @@ export function loadOutfit(slot: 'p1' | 'p2'): OutfitOverride {
 
 /** Persists this slot's customization immediately after every change. */
 export function saveOutfit(slot: 'p1' | 'p2', o: OutfitOverride) {
-    try { localStorage.setItem(OUTFIT_KEY[slot], JSON.stringify(o)); }
-    catch { /* storage unavailable — customization just won't persist */ }
+    saveStr(OUTFIT_KEY[slot], JSON.stringify(o));
 }
 
 // ---- color helpers -------------------------------------------------------
