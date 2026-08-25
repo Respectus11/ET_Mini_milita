@@ -4,8 +4,9 @@
 # reference/ : extracted/decompiled contents of the commercial
 #              Mini Militia XAPK. Copyrighted material — never
 #              redistribute. Kept local for study only.
-# tools/     : third-party binaries & multi-hundred-MB editor
-#              downloads (apktool.jar, jadx, CocosCreator zip).
+# tools/     : third-party binaries (apktool.jar, jadx) and the LAN
+#              relay server. The Cocos Creator editor itself is NOT
+#              bundled anymore — install it via Cocos Dashboard.
 # ============================================================
 
 # --- copyrighted reference material (never publish) ---
@@ -14,7 +15,7 @@ reference/
 # --- heavy toolchain binaries ---
 tools/*
 !tools/tsc-check/
-!tools/fetch-creator.ps1
+!tools/lan-relay.mjs
 
 # --- npm dependencies (tsc-check) ---
 # tools/tsc-check/ is whitelisted above, so re-ignore its installed deps;
