@@ -71,8 +71,13 @@ export class MatchManager extends Component {
         this.world = new TileWorld(this.mapDef);
 
         ensureUT(this.node);
+        // Shift the whole match subtree so world (0,0) sits at the
+        // arena's bottom-left on screen. Fighters, pickups, crates and
+        // projectiles all use raw world coordinates — aligning the ROOT
+        // keeps every entity in register with the painted tiles.
+        this.node.setPosition(-this.world.worldW / 2, -this.world.worldH / 2, 0);
         const bg = this.node.addComponent(Graphics);
-        this.world.drawStatic(bg, -this.world.worldW / 2, -this.world.worldH / 2);
+        this.world.drawStatic(bg, 0, 0);
 
         this.fighterRoot = new Node('fighters');
         this.itemsRoot = new Node('items');
