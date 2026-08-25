@@ -1,6 +1,3 @@
-import { ensureUT } from './UIUtil';
-void ensureUT;
-
 /**
  * EventBus.ts
  * ---------------------------------------------------------------------------
