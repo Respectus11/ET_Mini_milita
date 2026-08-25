@@ -70,6 +70,9 @@ export class TileWorld {
                     case 'Q': this.qSpawns.push(new Vec3(wx, wy, 0)); break;
                     case 'E': this.botSpawns.push(new Vec3(wx, wy, 0)); break;
                     case 'W':
+                    case 'B': // buna speed pickup
+                    case 'I': // injera heal pickup
+                    case 'M': // mesob shield pickup
                         this.itemSpawns.push({ ch: line[c], cx: wx, cy: wy });
                         break;
                 }
@@ -153,6 +156,14 @@ export class TileWorld {
                 }
             }
         }
+
+        // The world border is implicitly solid (tileAt returns SOLID off-grid),
+        // so clamp horizontally — a single snap can only resolve one tile of
+        // penetration, and this guarantees huge steps can never tunnel out.
+        if (body.x < 0.01) { body.x = 0.01; hitX = true; }
+        const maxX = this.cols * T - body.w - 0.01;
+        if (body.x > maxX) { body.x = maxX; hitX = true; }
+
         return [hitX, hitY, landed];
     }
 
