@@ -69,6 +69,11 @@ export class Fighter extends Component {
     fireCd = 0;
     meleeCd = 0;
 
+    // power-up state (buna / injera / mesob pickups)
+    speedT = 0;      // seconds of buna move-speed boost remaining
+    shieldHp = 0;    // damage the mesob shield can still absorb
+    shieldT = 0;     // seconds until the mesob shield expires
+
     kills = 0;
 
     moveIn: MoveInput = { mx: 0, jet: false, dropDown: false };
@@ -88,6 +93,9 @@ export class Fighter extends Component {
     private muzzleT = 0;              // counts down the flash/kick window
     private static FLASH_T = 0.07;
     private gunBaseX = 0;
+    /** Last rendered overlay state (invuln blink phase / shield presence). */
+    private lastBlink = -1;
+    private lastShieldOn = false;
 
     init(char: CharacterDef, world: TileWorld) {
         this.char = char;
@@ -114,12 +122,35 @@ export class Fighter extends Component {
         // own GunArt layer drawn by init()).
         drawFighterRig(this.bodyG, this.char, this.w, this.h, this.faceDir);
 
+        const g = this.bodyG;
+        if (this.shieldHp > 0) {
+            // mesob shield: ring around the whole body
+            g.lineWidth = 4;
+            g.strokeColor = new Color(64, 196, 255, 170);
+            g.circle(0, 0, Math.max(this.w, this.h) * 0.72);
+            g.stroke();
+        }
         if (this.invuln > 0 && Math.floor(this.invuln * 12) % 2 === 0) {
-            const g = this.bodyG;
             g.lineWidth = 3;
             g.strokeColor = new Color(255, 255, 255, 140);
             g.rect(-this.w * 0.7, -this.h * 0.6, this.w * 1.4, this.h * 1.2);
             g.stroke();
+        }
+        this.lastBlink = this.blinkPhase();
+        this.lastShieldOn = this.shieldHp > 0;
+    }
+
+    /** Overlay state fingerprint; body only repaints when this changes. */
+    private blinkPhase(): number {
+        return this.invuln > 0 ? Math.floor(this.invuln * 12) % 2 : -1;
+    }
+
+    /** Redraws the body only when invuln/shield visuals actually changed. */
+    private refreshOverlay() {
+        const phase = this.blinkPhase();
+        const shieldOn = this.shieldHp > 0;
+        if (phase !== this.lastBlink || shieldOn !== this.lastShieldOn) {
+            this.drawSelf();
         }
     }
 
@@ -129,6 +160,7 @@ export class Fighter extends Component {
         this.hp = CFG.MAX_HP;
         this.alive = true;
         this.fuel = CFG.JETPACK_MAX_FUEL;
+        this.speedT = 0; this.shieldHp = 0; this.shieldT = 0;
         this.invuln = CFG.INVULN_AFTER_SPAWN;
         this.node.active = true;
         this.syncNode();
@@ -144,13 +176,29 @@ export class Fighter extends Component {
     }
 
     applyDamage(dmg: number, killerId: number): boolean {
-        if (!this.alive || this.invuln > 0) return false;
+        if (!this.alive || this.invuln > 0 || dmg <= 0) return false;
+        // mesob shield soaks damage first
+        if (this.shieldHp > 0) {
+            const absorbed = Math.min(this.shieldHp, dmg);
+            this.shieldHp -= absorbed;
+            dmg -= absorbed;
+            if (this.shieldHp <= 0) { this.shieldHp = 0; this.shieldT = 0; }
+            this.drawSelf();
+        }
+        if (dmg <= 0) return true;
         this.hp -= dmg;
         bus.emit(Evt.HP_CHANGED, this.id, Math.max(0, this.hp), this.teamLabel);
         if (this.hp <= 0) {
             this.die(killerId);
         }
         return true;
+    }
+
+    /** Restores HP up to the cap (injera pack). */
+    heal(amount: number) {
+        if (!this.alive || amount <= 0) return;
+        this.hp = Math.min(CFG.MAX_HP, this.hp + amount);
+        bus.emit(Evt.HP_CHANGED, this.id, this.hp, this.teamLabel);
     }
 
     giveWeapon(def: WeaponDef) {
@@ -216,7 +264,8 @@ export class Fighter extends Component {
         this.tickTimers(dt);
 
         if (this.alive) {
-            const targetVx = this.moveIn.mx * CFG.MOVE_SPEED;
+            const speedMult = this.speedT > 0 ? CFG.BUNA_SPEED_MULT : 1;
+            const targetVx = this.moveIn.mx * CFG.MOVE_SPEED * speedMult;
             const accel = this.grounded ? 12 : 7;
             this.vx += (targetVx - this.vx) * Math.min(1, accel * dt);
 
@@ -248,7 +297,13 @@ export class Fighter extends Component {
     private tickTimers(dt: number) {
         if (this.fireCd > 0) this.fireCd -= dt;
         if (this.meleeCd > 0) this.meleeCd -= dt;
-        if (this.invuln > 0) this.invuln -= dt;
+        if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - dt);
+        if (this.speedT > 0) this.speedT = Math.max(0, this.speedT - dt);
+        if (this.shieldT > 0) {
+            this.shieldT = Math.max(0, this.shieldT - dt);
+            if (this.shieldT === 0) this.shieldHp = 0;
+        }
+        this.refreshOverlay();
         if (this.muzzleT > 0) {
             this.muzzleT = Math.max(0, this.muzzleT - dt);
             this.drawGunLayer(this.muzzleT / Fighter.FLASH_T);
