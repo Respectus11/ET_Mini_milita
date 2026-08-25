@@ -17,6 +17,7 @@ import { MatchManager } from './gameplay/MatchManager';
 import { TouchControls } from './input/TouchControls';
 import { KeyboardControls } from './input/KeyboardControls';
 import { t } from './data/Strings';
+import { coverSize, makeButton, TYPE } from './core/UIUtil';
 
 type Phase = 'MENU' | 'GAME' | 'RESULTS';
 @ccclass('GameRoot')
@@ -55,6 +56,7 @@ export class GameRoot extends Component {
     private startMatch(s: MenuState) {
         this.phase = 'GAME';
         this.clearMenu();
+        this.clearGame(); // also tears down any previous match (rematch path)
 
         this.gameNode = new Node('game');
         this.node.addChild(this.gameNode);
@@ -87,15 +89,10 @@ export class GameRoot extends Component {
             };
         }
 
-        // HUD
-        const hudNode = new Node('hud');
-        this.node.addChild(hudNode);
-        this.hud = hudNode.addComponent(GameHUD);
-        void this.hud; // built after match.start creates fighters
-
-        // input systems
+        // Input systems live UNDER gameNode so clearGame() frees the
+        // whole match (fixes node/input leaks on rematch).
         const inputNode = new Node('input');
-        this.node.addChild(inputNode);
+        this.gameNode.addChild(inputNode);
         this.touch = inputNode.addComponent(TouchControls);
         this.touch.enabledP1 = true;
         this.touch.enabledP2 = netRole === 'off' && s.twoPlayers;
