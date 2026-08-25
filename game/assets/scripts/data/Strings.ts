@@ -2,11 +2,13 @@
  * Strings.ts
  * ---------------------------------------------------------------------------
  * Bilingual UI strings: English (en) and Amharic (am, አማርኛ).
- * The selected language persists via localStorage and every UI surface calls
- * t(key) at draw time, so toggling language instantly re-renders all labels.
+ * The selected language persists via core/Storage (works on web and
+ * native builds) and every UI surface calls t(key) at draw time, so
+ * toggling language instantly re-renders all labels.
  *
  * To add a string: put it in BOTH tables. Fallback order is current -> en.
  */
+import { loadStr, saveStr } from '../core/Storage';
 export type Lang = 'en' | 'am';
 
 const en: Record<string, string> = {
@@ -28,6 +30,7 @@ const en: Record<string, string> = {
     quit: 'Quit to Menu',
     you_win: 'Victory!',
     you_lose: 'Defeat!',
+    draw: 'Draw!',
     p1_wins: 'Player 1 Wins!',
     p2_wins: 'Player 2 Wins!',
     rematch: 'Rematch',
@@ -61,6 +64,7 @@ const en: Record<string, string> = {
     waiting_relay: 'Connecting to relay…',
     waiting_peer: 'Waiting for opponent…',
     peer_found: 'Opponent connected!',
+    peer_waiting_host: 'Opponent connected — waiting for host to start…',
     bad_code: 'Wrong room code',
     room_full: 'Room is full',
     connect_fail: 'Could not reach relay',
@@ -87,6 +91,7 @@ const am: Record<string, string> = {
     quit: 'ወደ ሜኑ ተመለስ',
     you_win: 'አሸነፍክ!',
     you_lose: 'ተሸንፈህ!',
+    draw: 'እኩል ሆኗል!',
     p1_wins: 'ተጫዋች 1 አሸነፈ!',
     p2_wins: 'ተጫዋች 2 አሸነፈ!',
     rematch: 'እንደገና ተጫወት',
@@ -120,6 +125,7 @@ const am: Record<string, string> = {
     waiting_relay: 'ከሪሌ ጋር በመገናኘት ላይ…',
     waiting_peer: 'ለተጫዋች በመጠባበቅ ላይ…',
     peer_found: 'ተጫዋች ተገናኘ!',
+    peer_waiting_host: 'ተጫዋች ተገናኝቷል — አስተናጋጅ እስኪጀምር ይጠብቁ…',
     bad_code: 'ተሳሳተ ኮድ',
     room_full: 'ክፍሉ ሙሏል',
     connect_fail: 'ከሪሌ መገናኘት አልተቻለም',
@@ -133,7 +139,7 @@ let current: Lang = 'en';
 
 /** Restores the language saved by a previous session (safe on first run). */
 export function loadLang() {
-    const saved = localStorage.getItem('etmm_lang');
+    const saved = loadStr('etmm_lang');
     if (saved === 'am' || saved === 'en') current = saved;
 }
 
@@ -142,7 +148,7 @@ export function getLang(): Lang { return current; }
 /** Switches language and remembers the choice across sessions. */
 export function setLang(l: Lang) {
     current = l;
-    try { localStorage.setItem('etmm_lang', l); } catch (e) { /* storage unavailable */ }
+    saveStr('etmm_lang', l);
 }
 
 /** Translates a key with graceful fallback to the English table. */
