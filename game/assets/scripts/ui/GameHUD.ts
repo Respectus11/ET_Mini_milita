@@ -6,7 +6,7 @@
  * ammo line bottom-right, a pause button, and a transient message label.
  * refresh() is called every frame by GameRoot and repaints the bars.
  */
-import { _decorator, Color, Component, Graphics, Label, Node, UITransform } from 'cc';
+import { _decorator, Color, Component, Graphics, Label, Node } from 'cc';
 const { ccclass } = _decorator;
 import { CFG } from '../core/GameConfig';
 import { fmtTime } from '../core/Utils';
@@ -101,20 +101,21 @@ export class GameHUD extends Component {
         this.ammoLbl.color = new Color(255, 255, 160);
         aN.setPosition(W / 2 - 140, -470, 0);
 
-        // pause
+        // pause: drawn icon (two bars in a ring), generous touch target
         const pBtn = new Node('pause');
         this.node.addChild(pBtn);
-        pBtn.setPosition(-W / 2 + 50, -480, 0);
-        pBtn.addComponent(UITransform);
+        pBtn.setPosition(-W / 2 + 60, -480, 0);
+        ensureUT(pBtn).setContentSize(110, 110);
         const pg = pBtn.addComponent(Graphics);
         pg.lineWidth = 3;
-        pg.strokeColor = new Color(255, 255, 255, 130);
-        pg.circle(0, 0, 30);
+        pg.strokeColor = new Color(255, 255, 255, 120);
+        pg.circle(0, 0, 34);
         pg.stroke();
-        const plbl = pBtn.addComponent(Label);
-        plbl.string = '| |';
-        plbl.fontSize = 36;
-        plbl.isBold = true;
+        pg.fillColor = new Color(255, 255, 255, 170);
+        pg.roundRect(-11, -14, 7, 28, 3);
+        pg.fill();
+        pg.roundRect(4, -14, 7, 28, 3);
+        pg.fill();
         pBtn.on(Node.EventType.TOUCH_END, () => this.onPause?.());
 
         // center message label
