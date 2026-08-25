@@ -556,7 +556,7 @@ export class MainMenu extends Component {
         lan.role = 'guest';
         lan.onReady = () => {
             lan.send({ m: 'hello', char: this.state.charP2, outfit: this.state.outfitP2 });
-            this.setStatus(t('peer_found') + ' — ' + t('waiting_peer'));
+            this.setStatus(t('peer_waiting_host'));
         };
         lan.onData = (d: PeerMsg) => {
             if (d.m !== 'start') return;
