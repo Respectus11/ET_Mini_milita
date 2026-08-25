@@ -100,7 +100,12 @@ export class GameRoot extends Component {
 
         // after match roster exists, wire everything
         match.start();
-        this.hud.build(match.fighters, () => this.showResults(match, null));
+
+        // HUD is added AFTER match.start() so it renders above fighters
+        const hudNode = new Node('hud');
+        this.gameNode.addChild(hudNode);
+        this.hud = hudNode.addComponent(GameHUD);
+        this.hud.build(match.fighters, () => this.showResults(match, null, t('paused')));
         this.hud.refresh();
 
         const world = match.world;
@@ -177,7 +182,7 @@ export class GameRoot extends Component {
         this.phase = 'RESULTS';
         match.matchOver = true; // freeze simulation behind overlay
 
-        const W = 1920, H = 1080;
+        const W = coverSize().w, H = Math.max(1080, coverSize().h);
         const rn = new Node('results');
         this.node.addChild(rn);
         rn.addComponent(UITransform);
@@ -188,15 +193,16 @@ export class GameRoot extends Component {
 
         const winner = match.fighters.find(f => f.id === winnerId);
         const isNet = match.opts.netRole !== undefined && match.opts.netRole !== 'off';
-        let titleKey = titleOverride ?? 'you_lose';
+        let titleKey: string;
         if (!winner) {
-            titleKey = titleOverride ?? 'paused';
+            // explicit pause/quit title, or a natural end nobody won (0:0)
+            titleKey = titleOverride ?? 'draw';
         } else if (isNet) {
             titleKey = winner.id === match.myFighterId ? 'you_win' : 'you_lose';
         } else if (match.opts.twoPlayers) {
             titleKey = winner.teamLabel === 'P1' ? 'p1_wins' : 'p2_wins';
-        } else if (winner.teamLabel === 'P1') {
-            titleKey = 'you_win';
+        } else {
+            titleKey = winner.teamLabel === 'P1' ? 'you_win' : 'you_lose';
         }
 
         const tn = new Node('title');
@@ -204,8 +210,8 @@ export class GameRoot extends Component {
         tn.addComponent(UITransform);
         const tl = tn.addComponent(Label);
         tl.string = t(titleKey);
-        tl.fontSize = 96;
-        tl.lineHeight = 110;
+        tl.fontSize = TYPE.display;
+        tl.lineHeight = Math.floor(TYPE.display * 1.15);
         tl.isBold = true;
         tl.color = new Color(255, 226, 150);
         tn.setPosition(0, 260, 0);
@@ -217,8 +223,8 @@ export class GameRoot extends Component {
         sl.string = match.fighters
             .map(f => `${t(f.char.nameKey)} (${f.teamLabel}): ${match.scoreOf(f.id)}`)
             .join('\n');
-        sl.fontSize = 40;
-        sl.lineHeight = 54;
+        sl.fontSize = TYPE.h3;
+        sl.lineHeight = Math.floor(TYPE.h3 * 1.4);
         sn.setPosition(0, 60, 0);
 
         const netMatch = match.opts.netRole !== undefined && match.opts.netRole !== 'off';
@@ -258,23 +264,7 @@ export class GameRoot extends Component {
 
     private resultButton(parent: Node, x: number, y: number, text: string,
                          onClick: () => void, color: Color, w: number, h: number) {
-        const n = new Node('rbtn_' + text.slice(0, 5));
-        parent.addChild(n);
-        n.setPosition(x, y, 0);
-        n.addComponent(UITransform).setContentSize(w, h);
-        const g = n.addComponent(Graphics);
-        g.fillColor = color;
-        g.roundRect(-w / 2, -h / 2, w, h, 14);
-        g.fill();
-        const ln = new Node('l');
-        n.addChild(ln);
-        ln.addComponent(UITransform);
-        const l = ln.addComponent(Label);
-        l.string = text;
-        l.fontSize = Math.floor(h * 0.42);
-        l.isBold = true;
-        l.color = new Color(255, 255, 255);
-        n.on(Node.EventType.TOUCH_END, onClick);
+        makeButton(parent, { text, x, y, w, h, fill: color, fontSize: TYPE.h3, onClick });
     }
 
     // ---------- cleanup ----------
