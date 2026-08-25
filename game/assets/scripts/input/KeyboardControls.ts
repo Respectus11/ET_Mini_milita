@@ -43,7 +43,9 @@ export class KeyboardControls extends Component {
     reloadRequest = false;
 
     private onMouse(e: any) {
-        this.mouseDown = e.getType() === Input.EventType.MOUSE_DOWN;
+        // only the primary button fires — right/middle clicks are ignored
+        this.mouseDown = e.getType() === Input.EventType.MOUSE_DOWN &&
+            e.getButton?.() === 0;
     }
     private onMouseMove(e: any) {
         const p = e.getUILocation();
