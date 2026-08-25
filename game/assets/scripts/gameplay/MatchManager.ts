@@ -420,6 +420,12 @@ export class MatchManager extends Component {
 
         // ---- GUEST: mirror-only mode -------------------------------------
         if (this.netRole === 'guest') {
+            // Sample the local sticks/keyboard into our fighter's intent
+            // FIRST — sendLocalInput() relays exactly what they hold.
+            if (this.touchApply) this.touchApply(this.humans[0], null);
+            if (this.keyboardApply && this.humans[0]) {
+                this.keyboardApply(this.humans[0]);
+            }
             this.inputT += dt;
             if (this.inputT >= 1 / 30) {
                 this.inputT = 0;
