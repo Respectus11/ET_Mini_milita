@@ -2,11 +2,11 @@ import { _decorator, Color, Component, EditBox, Graphics, Label, Node, UITransfo
 const { ccclass } = _decorator;
 import {
     CHARACTERS, OutfitOverride,
-    loadOutfit, saveOutfit, resolveChar, toHex,
+    loadOutfit, saveOutfit, resolveChar,
 } from '../data/Characters';
 import { MAPS } from '../data/Maps';
 import { getLang, setLang, t } from '../data/Strings';
-import { ensureUT } from '../core/UIUtil';
+import { ensureUT, coverSize, makeButton, RADIUS, TYPE } from '../core/UIUtil';
 import { CFG } from '../core/GameConfig';
 import { drawFighterRig } from '../core/FighterArt';
 import { WeaponId, WEAPONS } from '../data/Weapons';
@@ -76,27 +76,29 @@ export class MainMenu extends Component {
 
     build() {
         const W = 1920, H = 1080;
+        // paint past the design width so notched/tall phones see no gutters
+        const CW = Math.max(W, coverSize().w);
 
         // background
         const bgN = new Node('bg');
         this.node.addChild(bgN);
         const bg = bgN.addComponent(Graphics);
         bg.fillColor = new Color(24, 28, 38);
-        bg.rect(-W / 2, -H / 2, W, H);
+        bg.rect(-CW / 2, -H / 2, CW, H);
         bg.fill();
         bg.fillColor = new Color(196, 148, 58, 255);
-        bg.rect(-W / 2, 120, W, 8);
+        bg.rect(-CW / 2, 120, CW, 8);
         bg.fill();
         bg.fillColor = new Color(46, 125, 50, 255);
-        bg.rect(-W / 2, 100, W, 8);
+        bg.rect(-CW / 2, 100, CW, 8);
         bg.fill();
         bg.fillColor = new Color(198, 40, 40, 255);
-        bg.rect(-W / 2, 80, W, 8);
+        bg.rect(-CW / 2, 80, CW, 8);
         bg.fill();
 
         // title
-        this.title('ET MINI MILITIA', 0, 420, 110);
-        this.title('ኢቲ ሚኒ ሚሊሻ', 0, 320, 64, new Color(230, 200, 120));
+        this.title('ET MINI MILITIA', 0, 420, TYPE.display);
+        this.title('ኢቲ ሚኒ ሚሊሻ', 0, 320, TYPE.h1, new Color(230, 200, 120));
 
         // language toggle
         this.langBtn = this.button(t('language'), -780, 430, () => {
@@ -105,13 +107,13 @@ export class MainMenu extends Component {
         }, 220, 70);
 
         // map selector
-        this.title(t('map_select'), 0, 190, 44);
+        this.title(t('map_select'), 0, 190, TYPE.body);
         this.arrowButton(-560, 60, '<', () => this.changeMap(-1));
         this.arrowButton(560, 60, '>', () => this.changeMap(1));
         const mapNameN = new Node('mapname');
         ensureUT(mapNameN);
         this.node.addChild(mapNameN);
-        this.mapLabel = this.makeLabel(mapNameN, '', 0, 90, 48);
+        this.mapLabel = this.makeLabel(mapNameN, '', 0, 90, TYPE.h2);
         const prevNode = new Node('mappreview');
         ensureUT(prevNode);
         this.node.addChild(prevNode);
@@ -119,19 +121,27 @@ export class MainMenu extends Component {
         this.mapPreview = prevNode.addComponent(Graphics);
 
         // mode buttons
-        this.button(t('play_bots'), 0, -140, () => {
-            this.state.mode = 'bots';
-            this.state.twoPlayers = false;
-            this.state.lan = null;
-            this.onStart?.(this.state);
-        }, 620, 100, new Color(46, 125, 50));
+        makeButton(this.node, {
+            text: t('play_bots'), x: 0, y: -140, w: 620, h: 100,
+            fill: new Color(46, 125, 50), fontSize: TYPE.h3,
+            onClick: () => {
+                this.state.mode = 'bots';
+                this.state.twoPlayers = false;
+                this.state.lan = null;
+                this.onStart?.(this.state);
+            },
+        });
 
-        const twoBtn = this.button(t('play_2p'), 0, -270, () => {
-            this.state.mode = 'local';
-            this.state.twoPlayers = true;
-            this.state.lan = null;
-            this.onStart?.(this.state);
-        }, 620, 100, new Color(21, 101, 192));
+        makeButton(this.node, {
+            text: t('play_2p'), x: 0, y: -270, w: 620, h: 100,
+            fill: new Color(21, 101, 192), fontSize: TYPE.h3,
+            onClick: () => {
+                this.state.mode = 'local';
+                this.state.twoPlayers = true;
+                this.state.lan = null;
+                this.onStart?.(this.state);
+            },
+        });
 
         // LAN row
         this.button(t('lan_host'), -170, -370, () => this.openLanPanel('host'),
@@ -148,7 +158,6 @@ export class MainMenu extends Component {
             this.state.charP2 = (this.state.charP2 + dir + CHARACTERS.length) % CHARACTERS.length;
             this.refreshChars();
         });
-        void twoBtn;
         this.refreshAll();
     }
 
@@ -156,12 +165,12 @@ export class MainMenu extends Component {
                     onChange: (d: number) => void): Label {
         const lblN = new Node('charLbl' + x);
         this.node.addChild(lblN);
-        const lbl = this.makeLabel(lblN, '', x, -450, 36);
+        const lbl = this.makeLabel(lblN, '', x, -450, TYPE.body);
         this.arrowButton(x - 260, -450, '<', () => onChange(-1), true);
         this.arrowButton(x + 260, -450, '>', () => onChange(1), true);
         this.button(t('customize'), x, -545,
             () => this.openOutfitPanel(slot), 240, 60,
-            new Color(96, 78, 40));
+            new Color(96, 78, 40), TYPE.small);
         return lbl;
     }
 
@@ -184,10 +193,22 @@ export class MainMenu extends Component {
     private rebuildTexts() {
         // simplest robust approach: rebuild whole menu
         this.closeLan();
+        this.closePanel();
         if (this.outfitNode && this.outfitNode.isValid) this.outfitNode.destroy();
         this.outfitNode = null;
         this.node.removeAllChildren();
         this.build();
+    }
+
+    /** Destroys the LAN panel and drops every stale widget reference. */
+    private closePanel() {
+        if (this.panelNode && this.panelNode.isValid) this.panelNode.destroy();
+        this.panelNode = null;
+        this.panelStatus = null;
+        this.panelCodeLbl = null;
+        this.panelStartBtn = null;
+        this.relayBox = null;
+        this.codeBox = null;
     }
 
     // ---- outfit editor -----------------------------------------------------
@@ -201,6 +222,7 @@ export class MainMenu extends Component {
         if (this.outfitNode && this.outfitNode.isValid) this.outfitNode.destroy();
 
         const W = 1920, H = 1080;
+        const CW = Math.max(W, coverSize().w);
         const pn = new Node('outfitPanel');
         this.node.addChild(pn);
         pn.addComponent(UITransform);
@@ -208,7 +230,7 @@ export class MainMenu extends Component {
 
         const g = pn.addComponent(Graphics);
         g.fillColor = new Color(8, 10, 16, 245);
-        g.rect(-W / 2, -H / 2, W, H);
+        g.rect(-CW / 2, -H / 2, CW, H);
         g.fill();
 
         const charIdx = slot === 'p1' ? this.state.charP1 : this.state.charP2;
@@ -228,8 +250,8 @@ export class MainMenu extends Component {
         titleN.setPosition(0, 430, 0);
         const tl = titleN.addComponent(Label);
         tl.string = `${t('customize')} — ${t(CHARACTERS[charIdx].nameKey)}`;
-        tl.fontSize = 64;
-        tl.lineHeight = 80;
+        tl.fontSize = TYPE.h1;
+        tl.lineHeight = Math.floor(TYPE.h1 * 1.25);
         tl.color = new Color(255, 226, 150);
 
         // live fighter preview (same rig + rifle layer the game renders)
@@ -251,7 +273,7 @@ export class MainMenu extends Component {
         padN.setPosition(-470, -170, 0);
         const padG = padN.addComponent(Graphics);
         padG.fillColor = new Color(28, 34, 46);
-        padG.roundRect(-110, -160, 220, 330, 18);
+        padG.roundRect(-110, -160, 220, 330, RADIUS.md);
         padG.fill();
 
         // swatch rows: [state key, i18n label, palette]
@@ -272,8 +294,8 @@ export class MainMenu extends Component {
             lblN.setPosition(-560, y, 0);
             const rl = lblN.addComponent(Label);
             rl.string = row.label;
-            rl.fontSize = 34;
-            rl.lineHeight = 42;
+            rl.fontSize = TYPE.body;
+            rl.lineHeight = Math.floor(TYPE.body * 1.3);
             rl.color = new Color(200, 205, 215);
             (lblN.getComponent(UITransform)!).setContentSize(300, 50);
 
@@ -319,12 +341,12 @@ export class MainMenu extends Component {
             ov = {};
             commit();
             repaint();
-        }, 300, 84, new Color(62, 74, 96));
+        }, 300, 84, new Color(62, 74, 96), TYPE.body);
 
         this.button(t('done'), 230, -420, () => {
             pn.destroy();
             if (this.outfitNode === pn) this.outfitNode = null;
-        }, 300, 84, new Color(46, 125, 50));
+        }, 300, 84, new Color(46, 125, 50), TYPE.body);
     }
 
     // ---- LAN room panel ---------------------------------------------------
@@ -355,6 +377,7 @@ export class MainMenu extends Component {
         this.closeLan();
 
         const W = 1920, H = 1080;
+        const CW = Math.max(W, coverSize().w);
         const pn = new Node('lanPanel');
         this.node.addChild(pn);
         pn.addComponent(UITransform);
@@ -362,7 +385,7 @@ export class MainMenu extends Component {
 
         const g = pn.addComponent(Graphics);
         g.fillColor = new Color(8, 10, 16, 240);
-        g.rect(-W / 2, -H / 2, W, H);
+        g.rect(-CW / 2, -H / 2, CW, H);
         g.fill();
 
         const lbl = (str: string, x: number, y: number, size: number,
@@ -382,27 +405,8 @@ export class MainMenu extends Component {
         };
 
         const btn = (text: string, x: number, y: number, onClick: () => void,
-                     w: number, h: number, color: Color): Node => {
-            const n = new Node('pbtn_' + text.slice(0, 6));
-            pn.addChild(n);
-            n.setPosition(x, y, 0);
-            n.addComponent(UITransform).setContentSize(w, h);
-            const bg = n.addComponent(Graphics);
-            bg.fillColor = color;
-            bg.roundRect(-w / 2, -h / 2, w, h, 14);
-            bg.fill();
-            const ln = new Node('l');
-            n.addChild(ln);
-            ensureUT(ln);
-            const l = ln.addComponent(Label);
-            l.string = text;
-            l.fontSize = Math.floor(h * 0.4);
-            l.lineHeight = Math.floor(h * 0.5);
-            l.color = new Color(255, 255, 255);
-            l.isBold = true;
-            n.on(Node.EventType.TOUCH_END, onClick);
-            return n;
-        };
+                     w: number, h: number, color: Color): Node =>
+            makeButton(pn, { text, x, y, w, h, fill: color, onClick });
 
         const editBox = (x: number, y: number, w: number, h: number,
                          ph: string): EditBox => {
@@ -412,10 +416,10 @@ export class MainMenu extends Component {
             bgN.addComponent(UITransform).setContentSize(w, h);
             const ebg = bgN.addComponent(Graphics);
             ebg.fillColor = new Color(28, 34, 46);
-            ebg.roundRect(-w / 2, -h / 2, w, h, 10);
+            ebg.roundRect(-w / 2, -h / 2, w, h, RADIUS.sm);
             ebg.strokeColor = new Color(120, 130, 150);
             ebg.lineWidth = 3;
-            ebg.roundRect(-w / 2, -h / 2, w, h, 10);
+            ebg.roundRect(-w / 2, -h / 2, w, h, RADIUS.sm);
             ebg.stroke();
             const n = new Node('eb');
             pn.addChild(n);
@@ -428,29 +432,28 @@ export class MainMenu extends Component {
             return eb;
         };
 
-        lbl(t('lan_title'), 0, 400, 68, new Color(255, 226, 150));
-        lbl(t('relay_addr'), 0, 280, 32);
+        lbl(t('lan_title'), 0, 400, TYPE.h1, new Color(255, 226, 150));
+        lbl(t('relay_addr'), 0, 280, TYPE.body);
 
         this.relayBox = editBox(0, 210, 760, 74, 'ws://192.168.1.10:9420');
         this.relayBox.string = LanClient.savedRelay();
 
         this.panelCodeLbl = role === 'host'
-            ? lbl('', 0, 60, 120, new Color(120, 255, 160))
+            ? lbl('', 0, 60, TYPE.display, new Color(120, 255, 160))
             : null;
 
         let codeStr = '';
         if (role === 'join') {
-            lbl(t('room_code'), 0, 90, 32);
+            lbl(t('room_code'), 0, 90, TYPE.body);
             this.codeBox = editBox(0, 20, 380, 74, 'ABCD');
             this.codeBox.maxLength = 4;
         }
 
-        this.panelStatus = lbl('', 0, -80, 34, new Color(255, 214, 120));
+        this.panelStatus = lbl('', 0, -80, TYPE.body, new Color(255, 214, 120));
 
         const backBtn = btn(t('back'), -420, -420, () => {
             this.closeLan();
-            pn.destroy();
-            this.panelNode = null;
+            this.closePanel();
         }, 260, 84, new Color(62, 74, 96));
 
         if (role === 'host') {
@@ -635,31 +638,11 @@ export class MainMenu extends Component {
     }
 
     private button(text: string, x: number, y: number, onClick: () => void,
-                   w = 300, h = 76, color: Color = new Color(62, 74, 96)): Node {
-        const n = new Node('btn_' + text.slice(0, 6));
-        this.node.addChild(n);
-        n.setPosition(x, y, 0);
-        const ut = n.addComponent(UITransform);
-        ut.setContentSize(w, h);
-        const g = n.addComponent(Graphics);
-        g.fillColor = color;
-        g.roundRect(-w / 2, -h / 2, w, h, 14);
-        g.fill();
-        g.lineWidth = 3;
-        g.strokeColor = new Color(255, 255, 255, 70);
-        g.roundRect(-w / 2 + 2, -h / 2 + 2, w - 4, h - 4, 12);
-        g.stroke();
-        const lblN = new Node('lbl');
-        n.addChild(lblN);
-        ensureUT(lblN);
-        const l = lblN.addComponent(Label);
-        l.string = text;
-        l.fontSize = Math.floor(h * 0.42);
-        l.lineHeight = Math.floor(h * 0.52);
-        l.color = new Color(255, 255, 255);
-        l.isBold = true;
-        n.on(Node.EventType.TOUCH_END, onClick);
-        return n;
+                   w = 300, h = 76, color: Color = new Color(62, 74, 96),
+                   fontSize?: number): Node {
+        return makeButton(this.node, {
+            text, x, y, w, h, fill: color, fontSize, onClick,
+        });
     }
 
     private arrowButton(x: number, y: number, ch: string, onClick: () => void, small = false) {
