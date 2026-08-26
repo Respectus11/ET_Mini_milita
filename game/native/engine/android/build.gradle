@@ -1,0 +1,31 @@
+// ============================================================================
+// build.gradle (project root)
+// Top-level Gradle build file for the Android project.
+//
+// Defines shared repositories and the Android Gradle Plugin version used by
+// all sub-modules (app, instantapp, libservice, libcocos).
+// ============================================================================
+
+buildscript {
+    repositories {
+        google()            // Google's Maven repository (AndroidX, AGP)
+        mavenCentral()      // Central Maven (OkHttp, Kotlin, etc.)
+    }
+    dependencies {
+        // Android Gradle Plugin — keep in sync with Android Studio version.
+        classpath 'com.android.tools.build:gradle:8.0.2'
+    }
+}
+
+// Shared repositories for all sub-projects.
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// Convenience task to delete all build outputs across modules.
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

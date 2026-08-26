@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  AndroidManifest.xml — Instant App manifest for ET Mini Militia.
+
+  Functionally similar to the main app manifest but includes the
+  dist:module declaration that marks this as a Google Play Instant app.
+  Users can try the game directly from the Play Store without installing.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:dist="http://schemas.android.com/apk/distribution"
+          android:installLocation="auto">
+
+  <!-- Declares this module as an Instant App entry point. -->
+  <dist:module dist:instant="true"/>
+
+  <!-- Network permissions — required for multiplayer, ads, and analytics. -->
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+
+  <application
+      android:extractNativeLibs="true"       <!-- Extract .so files before loading -->
+      android:allowBackup="true"
+      android:label="@string/app_name"
+      android:usesCleartextTraffic="true"
+      android:supportsRtl="true"             <!-- Support right-to-left layouts (instant apps) -->
+      android:icon="@mipmap/ic_launcher"
+      android:resizeableActivity="true">
+
+    <!-- Minimum AIA (Android Instant Apps) compat API version. -->
+    <meta-data android:name="aia-compat-api-min-version"
+               android:value="1"/>
+
+    <!-- Native library name — maps to libcocos.so loaded by CocosActivity. -->
+    <meta-data android:name="android.app.lib_name"
+               android:value="cocos"/>
+
+    <!--
+      InstantActivity — launcher activity for the instant app variant.
+      Supports both deep-link browsing (VIEW intent) and standard launch.
+      - sensorLandscape: forces landscape orientation for gameplay.
+      - singleTask: reuses the existing instance when relaunched.
+    -->
+    <activity
+        android:name="com.cocos.game.InstantActivity"
+        android:screenOrientation="sensorLandscape"
+        android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
+        android:label="@string/app_name"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+        android:launchMode="singleTask"
+        android:exported="true">
+
+      <!-- Deep-link intent filter — allows launching from browser URLs. -->
+      <intent-filter android:order="1">
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+      </intent-filter>
+
+      <!-- Standard launcher intent filter — appears in app launcher. -->
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+
+    <!--
+      CocosEditBoxActivity — transparent overlay used for in-game text input.
+      Provided by the Cocos Creator engine.
+    -->
+    <activity
+        android:name="com.cocos.lib.CocosEditBoxActivity"
+        android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
+        android:screenOrientation="behind"
+        android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"/>
+  </application>
+</manifest>

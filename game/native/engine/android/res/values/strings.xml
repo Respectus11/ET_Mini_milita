@@ -1,0 +1,9 @@
+<!--
+  strings.xml — Android string resources for ET Mini Militia.
+
+  The @string/app_name reference in AndroidManifest.xml resolves here.
+  Currently empty because Cocos Creator manages the display name via
+  the native window title (Game.cpp) rather than Android resources.
+-->
+<resources>
+</resources>

@@ -1,0 +1,133 @@
+// ============================================================================
+// instantapp/build.gradle
+// Gradle build script for the Instant App variant of ET Mini Militia.
+//
+// Nearly identical to the main app/build.gradle but targets Google Play
+// Instant, allowing users to try the game without a full installation.
+// Key differences from the standard app:
+//   - CPP flag ANDROID_INSTANT=1 enables instant-app-specific engine paths.
+//   - Gold linker (-DANDROID_LD=gold) for faster load times in instant mode.
+//   - No applicationId override (instant apps use the base module's ID).
+// ============================================================================
+
+import org.apache.tools.ant.taskdefs.condition.Os
+
+apply plugin: 'com.android.application'
+
+// Normalise path separators for cross-platform Gradle builds.
+RES_PATH          = RES_PATH.replace("\\", "/")
+COCOS_ENGINE_PATH = COCOS_ENGINE_PATH.replace("\\", "/")
+
+// Dedicated build output directory for the instant variant.
+buildDir = "${RES_PATH}/proj/build/instantapp"
+
+android {
+    // SDK / build tool versions — inherited from Cocos Creator export properties.
+    compileSdkVersion PROP_COMPILE_SDK_VERSION.toInteger()
+    buildToolsVersion PROP_BUILD_TOOLS_VERSION
+    ndkPath           PROP_NDK_PATH
+    namespace         APPLICATION_ID
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        minSdkVersion    PROP_MIN_SDK_VERSION
+        targetSdkVersion PROP_TARGET_SDK_VERSION
+        versionCode      1
+        versionName      "1.0"
+
+        // -------------------------------------------------------------------
+        // CMake / NDK configuration for the instant app.
+        // Note the extra ANDROID_INSTANT=1 flag and gold linker.
+        // -------------------------------------------------------------------
+        externalNativeBuild {
+            cmake {
+                targets "cocos"
+                arguments "-DRES_DIR=${RES_PATH}",
+                          "-DCOCOS_X_PATH=${COCOS_ENGINE_PATH}",
+                          "-DANDROID_STL=c++_static",
+                          "-DANDROID_TOOLCHAIN=clang",
+                          "-DANDROID_ARM_NEON=TRUE",
+                          "-DANDROID_LD=gold"           // Gold linker for faster load
+                cppFlags "-frtti -fexceptions -fsigned-char -DANDROID_INSTANT=1"
+            }
+            ndk {
+                abiFilters PROP_APP_ABI.split(':')
+            }
+        }
+    }
+
+    // Source sets — same layout as the standard app module.
+    sourceSets.main {
+        java.srcDirs     "../src", "src"
+        res.srcDirs      "../res", 'res', "${RES_PATH}/proj/res"
+        jniLibs.srcDirs  "../libs", 'libs'
+        manifest.srcFile "AndroidManifest.xml"
+        assets.srcDir    "${RES_PATH}/data"
+    }
+
+    // CMake integration — same path, shared staging directory.
+    externalNativeBuild {
+        cmake {
+            version "3.22.1"
+            path "../CMakeLists.txt"
+            buildStagingDirectory "${RES_PATH}/proj/build"
+        }
+    }
+
+    // Release signing — same credential pattern as the main app.
+    signingConfigs {
+        release {
+            if (project.hasProperty("RELEASE_STORE_FILE") && !RELEASE_STORE_FILE.isEmpty()) {
+                storeFile     file(RELEASE_STORE_FILE)
+                storePassword RELEASE_STORE_PASSWORD
+                keyAlias      RELEASE_KEY_ALIAS
+                keyPassword   RELEASE_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            debuggable           false
+            jniDebuggable        false
+            renderscriptDebuggable false
+            minifyEnabled        true
+            shrinkResources      true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'),
+                           'proguard-rules.pro'
+
+            if (project.hasProperty("RELEASE_STORE_FILE")) {
+                signingConfig signingConfigs.release
+            }
+
+            // Hide native symbols in release builds.
+            externalNativeBuild {
+                cmake {
+                    arguments "-DHIDE_SYMBOLS=ON"
+                }
+            }
+        }
+
+        debug {
+            debuggable           true
+            jniDebuggable        true
+            renderscriptDebuggable true
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dependencies — identical to the main app module (minus optional input SDK).
+// ---------------------------------------------------------------------------
+dependencies {
+    implementation fileTree(dir: '../libs', include: ['*.jar','*.aar'])
+    implementation fileTree(dir: 'libs',    include: ['*.jar','*.aar'])
+    implementation fileTree(dir: "${COCOS_ENGINE_PATH}/cocos/platform/android/java/libs",
+                            include: ['*.jar'])
+    implementation project(':libservice')
+    implementation project(':libcocos')
+}

@@ -1,0 +1,165 @@
+// ============================================================================
+// app/build.gradle
+// Gradle build script for the main (non-instant) APK of ET Mini Militia.
+//
+// Configures the Android application module including:
+//   - SDK / NDK versions pulled from exported Cocos Creator properties
+//   - CMake native build integration (compiles Game.cpp + engine into .so)
+//   - Signing, minification (R8 / ProGuard), and debug / release variants
+//   - Dependencies on the Cocos engine modules (libservice, libcocos)
+// ============================================================================
+
+import org.apache.tools.ant.taskdefs.condition.Os
+
+// Apply the Android application plugin.
+apply plugin: 'com.android.application'
+
+// Normalise path separators for cross-platform Gradle builds.
+RES_PATH          = RES_PATH.replace("\\", "/")
+COCOS_ENGINE_PATH = COCOS_ENGINE_PATH.replace("\\", "/")
+
+// Build output goes to the Cocos Creator export directory so assets stay in sync.
+buildDir = "${RES_PATH}/proj/build/${project.name ==~ /^[_a-zA-Z0-9-]+$/ ? project.name : 'CocosGame'}"
+
+android {
+    // -----------------------------------------------------------------------
+    // Compile / build tool settings — values come from Cocos Creator export.
+    // -----------------------------------------------------------------------
+    compileSdkVersion PROP_COMPILE_SDK_VERSION.toInteger()
+    buildToolsVersion PROP_BUILD_TOOLS_VERSION
+    ndkPath           PROP_NDK_PATH
+    namespace         APPLICATION_ID   // R class package namespace
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        applicationId APPLICATION_ID
+        minSdkVersion  PROP_MIN_SDK_VERSION
+        targetSdkVersion PROP_TARGET_SDK_VERSION
+        versionCode    1
+        versionName    "1.0"
+
+        // -------------------------------------------------------------------
+        // CMake / NDK configuration — builds the "cocos" shared library.
+        // -------------------------------------------------------------------
+        externalNativeBuild {
+            cmake {
+                targets "cocos"
+                arguments "-DRES_DIR=${RES_PATH}",
+                          "-DANDROID_STL=c++_static",
+                          "-DANDROID_TOOLCHAIN=clang",
+                          "-DANDROID_ARM_NEON=TRUE"
+            }
+            ndk {
+                // Build only for the ABIs listed in gradle.properties.
+                abiFilters PROP_APP_ABI.split(':')
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Source sets — where Gradle finds Java, resources, JNI libs, and assets.
+    // -----------------------------------------------------------------------
+    sourceSets.main {
+        java.srcDirs     "../src", "src"
+        res.srcDirs      "../res", 'res', "${RES_PATH}/proj/res"
+        jniLibs.srcDirs  "../libs", 'libs'
+        manifest.srcFile "AndroidManifest.xml"
+        assets.srcDir    "${RES_PATH}/data"
+
+        jniLibs {
+            // Uncomment to include Vulkan validation layers for debugging:
+            // srcDir "${android.ndkDirectory}/sources/third_party/vulkan/src/build-android/jniLibs"
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // External native build — CMake integration.
+    // -----------------------------------------------------------------------
+    externalNativeBuild {
+        cmake {
+            version "3.22.1"
+            path "../CMakeLists.txt"
+            buildStagingDirectory "${RES_PATH}/proj/build"
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Release signing configuration.
+    // Credentials are read from gradle.properties (not checked into VCS).
+    // -----------------------------------------------------------------------
+    signingConfigs {
+        release {
+            if (project.hasProperty("RELEASE_STORE_FILE") && !RELEASE_STORE_FILE.isEmpty()) {
+                storeFile     file(RELEASE_STORE_FILE)
+                storePassword RELEASE_STORE_PASSWORD
+                keyAlias      RELEASE_KEY_ALIAS
+                keyPassword   RELEASE_KEY_PASSWORD
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Build variants — release (minified) and debug (unsymbolicated).
+    // -----------------------------------------------------------------------
+    buildTypes {
+        release {
+            debuggable           false
+            jniDebuggable        false
+            renderscriptDebuggable false
+            minifyEnabled        true   // R8 code shrinking
+            shrinkResources      true   // Remove unused resources
+            proguardFiles getDefaultProguardFile('proguard-android.txt'),
+                           'proguard-rules.pro'
+
+            // Apply release signing if credentials are available.
+            if (project.hasProperty("RELEASE_STORE_FILE")) {
+                signingConfig signingConfigs.release
+            }
+
+            // Hide native symbols in release to reduce .so size.
+            externalNativeBuild {
+                cmake {
+                    arguments "-DHIDE_SYMBOLS=ON"
+                }
+            }
+
+            // Mark this as the default variant when building from CLI.
+            if (!Boolean.parseBoolean(PROP_IS_DEBUG)) {
+                getIsDefault().set(true)
+            }
+        }
+
+        debug {
+            debuggable           true
+            jniDebuggable        true
+            renderscriptDebuggable true
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dependencies — engine libraries, service SDKs, and optional input SDK.
+// ---------------------------------------------------------------------------
+dependencies {
+    // Local JARs / AARs shipped with the project.
+    implementation fileTree(dir: '../libs', include: ['*.jar','*.aar'])
+    implementation fileTree(dir: 'libs',    include: ['*.jar','*.aar'])
+
+    // Cocos Creator engine platform JARs.
+    implementation fileTree(dir: "${COCOS_ENGINE_PATH}/cocos/platform/android/java/libs",
+                            include: ['*.jar'])
+
+    // Cocos engine modules (libservice = platform services, libcocos = core).
+    implementation project(':libservice')
+    implementation project(':libcocos')
+
+    // Google Play Games input SDK — only included when explicitly enabled.
+    if (Boolean.parseBoolean(PROP_ENABLE_INPUTSDK)) {
+        implementation 'com.google.android.libraries.play.games:inputmapping:1.1.0-beta'
+        implementation "org.jetbrains.kotlin:kotlin-stdlib:1.4.10"
+    }
+}

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  AndroidManifest.xml — Main (non-instant) app manifest for ET Mini Militia.
+
+  Declares permissions, the launcher activity (AppActivity), and the
+  in-game edit box activity provided by the Cocos Creator engine.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          android:installLocation="auto">
+
+  <!-- Network permissions — required for multiplayer, ads, and analytics. -->
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+
+  <application
+      android:extractNativeLibs="true"       <!-- Extract .so files before loading (required by Cocos) -->
+      android:allowBackup="true"             <!-- Allow Android auto-backup -->
+      android:label="@string/app_name"       <!-- Human-readable app name from strings.xml -->
+      android:usesCleartextTraffic="true"    <!-- Allow HTTP (needed for some ad networks) -->
+      android:icon="@mipmap/ic_launcher"     <!-- App icon -->
+      android:resizeableActivity="true">     <!-- Support split-screen / multi-window -->
+
+    <!-- Native library name — maps to libcocos.so loaded by CocosActivity. -->
+    <meta-data android:name="android.app.lib_name"
+               android:value="cocos"/>
+
+    <!--
+      AppActivity — the main launcher activity.
+      - sensorLandscape: forces landscape orientation for gameplay.
+      - singleTask: reuses the existing instance when relaunched.
+      - configChanges: the engine handles orientation/keyboard changes itself.
+    -->
+    <activity
+        android:name="com.cocos.game.AppActivity"
+        android:screenOrientation="sensorLandscape"
+        android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
+        android:label="@string/app_name"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+        android:launchMode="singleTask"
+        android:exported="true">
+
+      <!-- Intent filter — marks this activity as the app entry point. -->
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+
+    <!--
+      CocosEditBoxActivity — transparent overlay used for in-game text input
+      (e.g. chat, name entry). Provided by the Cocos Creator engine.
+    -->
+    <activity
+        android:name="com.cocos.lib.CocosEditBoxActivity"
+        android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
+        android:screenOrientation="behind"
+        android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"/>
+  </application>
+</manifest>
