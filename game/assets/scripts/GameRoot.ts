@@ -13,6 +13,7 @@ const { ccclass } = _decorator;
 import { loadLang } from './data/Strings';
 import { MainMenu, MenuState } from './ui/MainMenu';
 import { GameHUD } from './ui/GameHUD';
+import { LoadingScreen } from './ui/LoadingScreen';
 import { MatchManager } from './gameplay/MatchManager';
 import { TouchControls } from './input/TouchControls';
 import { KeyboardControls } from './input/KeyboardControls';
@@ -154,9 +155,21 @@ export class GameRoot extends Component {
 
     // ---------- GAME ----------
     private startMatch(s: MenuState) {
-        this.phase = 'GAME';
         this.clearMenu();
-        this.clearGame(); // also tears down any previous match (rematch path)
+        this.clearGame();
+
+        // Display historical warrior artwork and quote on the loading screen
+        const loadNode = new Node('loading_screen');
+        this.node.addChild(loadNode);
+        const loader = loadNode.addComponent(LoadingScreen);
+        loader.onLoaded = () => {
+            this.launchMatch(s);
+        };
+        loader.build();
+    }
+
+    private launchMatch(s: MenuState) {
+        this.phase = 'GAME';
 
         this.gameNode = new Node('game');
         this.node.addChild(this.gameNode);
