@@ -12,6 +12,8 @@
  *                            darken — no gradients, glows or hairlines.
  */
 import { Color, Graphics, Label, Node, UITransform, view } from 'cc';
+import { punchScale } from './Motion';
+import { Sfx } from './Audio';
 
 /** Returns the node's UITransform, attaching one first if missing. */
 export function ensureUT(n: Node): UITransform {
@@ -107,7 +109,12 @@ export function makeButton(parent: Node, o: ButtonOptions): Node {
     l.color = o.textColor ?? new Color(255, 255, 255);
 
     n.on(Node.EventType.TOUCH_START, () => paint(shade(base, 0.8)));
-    n.on(Node.EventType.TOUCH_END, () => { paint(base); o.onClick(); });
+    n.on(Node.EventType.TOUCH_END, () => {
+        paint(base);
+        punchScale(n, 1.05, 0.1);
+        Sfx.playClick();
+        o.onClick();
+    });
     n.on(Node.EventType.TOUCH_CANCEL, () => paint(base));
     return n;
 }

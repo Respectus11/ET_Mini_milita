@@ -57,4 +57,5 @@ export const Evt = {
     WEAPON_CHANGED: 'weaponChanged',
     RESPAWNED: 'respawned',
     PICKUP: 'pickup',
+    KILLSTREAK: 'killstreak',
 };
