@@ -1,21 +1,15 @@
 /**
  * Strings.ts
  * ---------------------------------------------------------------------------
- * Bilingual UI strings: English (en) and Amharic (am, አማርኛ).
- * The selected language persists via core/Storage (works on web and
- * native builds) and every UI surface calls t(key) at draw time, so
- * toggling language instantly re-renders all labels.
- *
- * To add a string: put it in BOTH tables. Fallback order is current -> en.
+ * English UI string table.
  */
-import { loadStr, saveStr } from '../core/Storage';
-export type Lang = 'en' | 'am';
+export type Lang = 'en';
 
 const en: Record<string, string> = {
     game_title: 'ET MINI MILITIA',
     play_bots: 'Play vs Bots',
     play_2p: 'Two Players (Same Device)',
-    language: 'አማርኛ',
+    language: 'English',
     map_select: 'Select Map',
     map_lalibela: 'Lalibela',
     map_simien: 'Simien Mountains',
@@ -40,6 +34,15 @@ const en: Record<string, string> = {
     w_sniper: 'Sniper',
     w_launcher: 'Grenade Launcher',
     w_smg: 'SMG',
+    w_magnum: 'Magnum',
+    w_plasma: 'Plasma Gun',
+    grenade: 'Grenade',
+    headshot: 'HEADSHOT!',
+    double_kill: 'DOUBLE KILL!',
+    triple_kill: 'TRIPLE KILL!',
+    rampage: 'RAMPAGE!',
+    unstoppable: 'UNSTOPPABLE!',
+    first_blood: 'FIRST BLOOD!',
     fists: 'Fists',
     char_abebe: 'Abebe',
     char_almaz: 'Almaz',
@@ -70,88 +73,25 @@ const en: Record<string, string> = {
     connect_fail: 'Could not reach relay',
     opp_left: 'Opponent left!',
     relay_hint: 'Run:  node tools/lan-relay.mjs  then use a printed address, e.g. ws://192.168.1.10:9420',
+    settings: 'Settings',
+    shake: 'Screen Shake',
+    particles: 'Effects',
+    low: 'Low',
+    med: 'Medium',
+    high: 'High',
+    fps: 'Show FPS',
+    on: 'On',
+    off: 'Off',
+    sfx: 'Sound FX',
+    sfx_soon: 'Sound effects: coming soon',
 };
 
-const am: Record<string, string> = {
-    game_title: 'ኢቲ ሚኒ ሚሊሻ',
-    play_bots: 'ከሰው ሰራሽ ጋር ተጫወት',
-    play_2p: 'ሁለት ተጫዋቾች (በአንድ ስልክ)',
-    language: 'English',
-    map_select: 'የጦርነት ስፍራ ይምረጡ',
-    map_lalibela: 'ላሊበላ',
-    map_simien: 'ስሜን ተራራማ',
-    map_merkato: 'መርካቶ ጣ᪃ዎች',
-    map_danakil: 'ዳናኪል ጨው ሜዳ',
-    frag_limit: 'የድል ውጤት',
-    time_limit: 'የጊዜ ገደብ',
-    start: 'ጀምር',
-    back: 'ተመለስ',
-    paused: 'ለአፍታ ቆሟል',
-    resume: 'ቀጥል',
-    quit: 'ወደ ሜኑ ተመለስ',
-    you_win: 'አሸነፍክ!',
-    you_lose: 'ተሸንፈህ!',
-    draw: 'እኩል ሆኗል!',
-    p1_wins: 'ተጫዋች 1 አሸነፈ!',
-    p2_wins: 'ተጫዋች 2 አሸነፈ!',
-    rematch: 'እንደገና ተጫወት',
-    menu: 'ሜኑ',
-    w_rifle: 'ሬፈል',
-    w_shotgun: 'ሾትጋን',
-    w_sniper: 'ስናይፐር',
-    w_launcher: 'ቦምብ መወርወሪያ',
-    w_smg: 'ኤስኤምጂ',
-    fists: 'እጆች',
-    char_abebe: 'አበበ',
-    char_almaz: 'አልማዝ',
-    char_desta: 'ደስታ',
-    char_hanna: 'ሐና',
-    choose_char_p1: 'የተጫዋች 1 ተውኔት',
-    choose_char_p2: 'የተጫዋች 2 ተውኔት',
-    customize: 'ልብስ ቀይር',
-    outfit_body: 'ልብስ',
-    outfit_scarf: 'ነጠላ',
-    outfit_skin: 'የቆዳ ቀለም',
-    outfit_reset: 'ነባር',
-    done: 'ጨርስ',
-    lan_host: 'አስተናጋጅ (LAN)',
-    lan_join: 'ተቀላቀል (LAN)',
-    lan_title: 'የአውታረ መረብ ጨዋታ',
-    relay_addr: 'የሪሌ አድራሻ',
-    room_code: 'የክፍል ኮድ',
-    create_room: 'ክፍል ፍጠር',
-    join_room: 'ክፍል ተቀላቀል',
-    start_match: 'ጨዋታ ጀምር',
-    waiting_relay: 'ከሪሌ ጋር በመገናኘት ላይ…',
-    waiting_peer: 'ለተጫዋች በመጠባበቅ ላይ…',
-    peer_found: 'ተጫዋች ተገናኘ!',
-    peer_waiting_host: 'ተጫዋች ተገናኝቷል — አስተናጋጅ እስኪጀምር ይጠብቁ…',
-    bad_code: 'ተሳሳተ ኮድ',
-    room_full: 'ክፍሉ ሙሏል',
-    connect_fail: 'ከሪሌ መገናኘት አልተቻለም',
-    opp_left: 'ተጫዋቹ ወጥቷል!',
-    relay_hint: 'ይሄን ያሂዱ፦  node tools/lan-relay.mjs  ከዚያ የታተመ አድራሻ ይጠቀሙ፣ ለምሳሌ ws://192.168.1.10:9420',
-};
+export function loadLang() { /* English only */ }
+export function getLang(): Lang { return 'en'; }
+export function setLang(_l: any) { /* English only */ }
 
-const tables: Record<Lang, Record<string, string>> = { en, am };
-
-let current: Lang = 'en';
-
-/** Restores the language saved by a previous session (safe on first run). */
-export function loadLang() {
-    const saved = loadStr('etmm_lang');
-    if (saved === 'am' || saved === 'en') current = saved;
-}
-
-export function getLang(): Lang { return current; }
-
-/** Switches language and remembers the choice across sessions. */
-export function setLang(l: Lang) {
-    current = l;
-    saveStr('etmm_lang', l);
-}
-
-/** Translates a key with graceful fallback to the English table. */
+/** Translates a key using the English table. */
 export function t(key: string): string {
-    return tables[current][key] ?? en[key] ?? key;
+    return en[key] ?? key;
 }
+

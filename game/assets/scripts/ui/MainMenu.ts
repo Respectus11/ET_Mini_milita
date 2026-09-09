@@ -1,17 +1,20 @@
-import { _decorator, Color, Component, EditBox, Graphics, Label, Node, UITransform } from 'cc';
+import { _decorator, Color, Component, EditBox, Graphics, Label, Node, Tween, UITransform, Vec3, tween } from 'cc';
 const { ccclass } = _decorator;
 import {
     CHARACTERS, OutfitOverride,
     loadOutfit, saveOutfit, resolveChar,
 } from '../data/Characters';
 import { MAPS } from '../data/Maps';
-import { getLang, setLang, t } from '../data/Strings';
+import { t } from '../data/Strings';
 import { ensureUT, coverSize, makeButton, RADIUS, TYPE } from '../core/UIUtil';
+import { bobY, DUR, popIn, punchScale } from '../core/Motion';
+import { getSettings, updateSettings } from '../core/Settings';
 import { CFG } from '../core/GameConfig';
 import { drawFighterRig } from '../core/FighterArt';
 import { WeaponId, WEAPONS } from '../data/Weapons';
 import { drawGun } from '../gameplay/GunArt';
 import { LanClient, PeerMsg } from '../net/LanClient';
+import { Sfx } from '../core/Audio';
 
 export type MenuMode = 'bots' | 'local' | 'netHost' | 'netGuest';
 
@@ -53,7 +56,6 @@ export class MainMenu extends Component {
     };
     onStart: ((s: MenuState) => void) | null = null;
 
-    private langBtn!: Node;
     private mapLabel!: Label;
     private mapPreview!: Graphics;
     private p1Label: Label | null = null;
@@ -68,6 +70,20 @@ export class MainMenu extends Component {
     private panelStartBtn: Node | null = null;
     private relayBox: EditBox | null = null;
     private codeBox: EditBox | null = null;
+    // ambience/loop bookkeeping (stopped on rebuild so no tween hits a dead node)
+    private loopTargets: Node[] = [];
+    private previewN: Node | null = null;
+
+    private stopLoops() {
+        for (const n of this.loopTargets) Tween.stopAllByTarget(n);
+        this.loopTargets.length = 0;
+        this.stopPreviewTween();
+    }
+
+    private stopPreviewTween() {
+        if (this.previewN) Tween.stopAllByTarget(this.previewN);
+        this.previewN = null;
+    }
 
     onDestroy() {
         // If a connection was never handed off to the match, drop it.
@@ -96,15 +112,19 @@ export class MainMenu extends Component {
         bg.rect(-CW / 2, 80, CW, 8);
         bg.fill();
 
-        // title
-        this.title('ET MINI MILITIA', 0, 420, TYPE.display);
-        this.title('ኢቲ ሚኒ ሚሊሻ', 0, 320, TYPE.h1, new Color(230, 200, 120));
+        // living background: rotating sun rays + drifting clouds
+        this.buildAmbience(CW);
 
-        // language toggle
-        this.langBtn = this.button(t('language'), -780, 430, () => {
-            setLang(getLang() === 'en' ? 'am' : 'en');
-            this.rebuildTexts();
-        }, 220, 70);
+        // title (layered shadow + entrance pop + gentle bob)
+        const t1 = this.title('ET MINI MILITIA', 0, 390, TYPE.display);
+        popIn(t1, DUR.dramatic, 0.05);
+        bobY(t1, 7, 2.6);
+        this.loopTargets.push(t1);
+
+        // settings toggle
+        const settingsBtn = this.button(t('settings'), 780, 430, () => this.openSettingsPanel(),
+            220, 70, new Color(62, 74, 96));
+        popIn(settingsBtn, DUR.quick, 0.2);
 
         // map selector
         this.title(t('map_select'), 0, 190, TYPE.body);
@@ -121,7 +141,7 @@ export class MainMenu extends Component {
         this.mapPreview = prevNode.addComponent(Graphics);
 
         // mode buttons
-        makeButton(this.node, {
+        const botsBtn = makeButton(this.node, {
             text: t('play_bots'), x: 0, y: -140, w: 620, h: 100,
             fill: new Color(46, 125, 50), fontSize: TYPE.h3,
             onClick: () => {
@@ -131,8 +151,9 @@ export class MainMenu extends Component {
                 this.onStart?.(this.state);
             },
         });
+        popIn(botsBtn, DUR.medium, 0.3);
 
-        makeButton(this.node, {
+        const twoPBtn = makeButton(this.node, {
             text: t('play_2p'), x: 0, y: -270, w: 620, h: 100,
             fill: new Color(21, 101, 192), fontSize: TYPE.h3,
             onClick: () => {
@@ -142,12 +163,15 @@ export class MainMenu extends Component {
                 this.onStart?.(this.state);
             },
         });
+        popIn(twoPBtn, DUR.medium, 0.38);
 
         // LAN row
-        this.button(t('lan_host'), -170, -370, () => this.openLanPanel('host'),
+        const hostBtn = this.button(t('lan_host'), -170, -370, () => this.openLanPanel('host'),
             300, 76, new Color(0, 105, 92));
-        this.button(t('lan_join'), 170, -370, () => this.openLanPanel('join'),
+        const joinBtn = this.button(t('lan_join'), 170, -370, () => this.openLanPanel('join'),
             300, 76, new Color(0, 105, 92));
+        popIn(hostBtn, DUR.medium, 0.46);
+        popIn(joinBtn, DUR.medium, 0.52);
 
         // character selectors (with per-slot outfit customization)
         this.p1Label = this.charRow(-650, 'p1', (dir) => {
@@ -159,17 +183,21 @@ export class MainMenu extends Component {
             this.refreshChars();
         });
         this.refreshAll();
+
+        // entrance choreography for the map widgets
+        popIn(this.mapLabel.node, DUR.medium, 0.12);
+        popIn(this.mapPreview.node, DUR.medium, 0.18);
     }
 
     private charRow(x: number, slot: 'p1' | 'p2',
                     onChange: (d: number) => void): Label {
         const lblN = new Node('charLbl' + x);
         this.node.addChild(lblN);
-        const lbl = this.makeLabel(lblN, '', x, -450, TYPE.body);
-        this.arrowButton(x - 260, -450, '<', () => onChange(-1), true);
-        this.arrowButton(x + 260, -450, '>', () => onChange(1), true);
-        this.button(t('customize'), x, -545,
-            () => this.openOutfitPanel(slot), 240, 60,
+        const lbl = this.makeLabel(lblN, '', x, -430, TYPE.body);
+        this.arrowButton(x - 260, -430, '<', () => onChange(-1), true);
+        this.arrowButton(x + 260, -430, '>', () => onChange(1), true);
+        this.button(t('customize'), x, -490,
+            () => this.openOutfitPanel(slot), 230, 54,
             new Color(96, 78, 40), TYPE.small);
         return lbl;
     }
@@ -184,7 +212,6 @@ export class MainMenu extends Component {
     }
 
     private refreshAll() {
-        this.langBtn.getComponentInChildren(Label)!.string = t('language');
         this.mapLabel.string = t(this.mapDef().nameKey);
         this.drawPreview();
         this.refreshChars();
@@ -196,6 +223,7 @@ export class MainMenu extends Component {
         this.closePanel();
         if (this.outfitNode && this.outfitNode.isValid) this.outfitNode.destroy();
         this.outfitNode = null;
+        this.stopLoops(); // no tween may outlive the nodes it drives
         this.node.removeAllChildren();
         this.build();
     }
@@ -260,6 +288,14 @@ export class MainMenu extends Component {
         ensureUT(prevN);
         prevN.setPosition(-470, 40, 0);
         prevN.setScale(2.8, 2.8, 1);
+        // idle "breathing" — the preview feels alive
+        this.stopPreviewTween();
+        this.previewN = prevN;
+        tween(prevN).repeatForever(
+            tween(prevN)
+                .to(1.15, { scale: new Vec3(2.86, 2.72, 1) }, { easing: 'sineInOut' })
+                .to(1.15, { scale: new Vec3(2.8, 2.8, 1) }, { easing: 'sineInOut' }),
+        ).start();
         const pg = prevN.addComponent(Graphics);
         const gunN = new Node('gun');
         prevN.addChild(gunN);
@@ -344,6 +380,7 @@ export class MainMenu extends Component {
         }, 300, 84, new Color(62, 74, 96), TYPE.body);
 
         this.button(t('done'), 230, -420, () => {
+            this.stopPreviewTween();
             pn.destroy();
             if (this.outfitNode === pn) this.outfitNode = null;
         }, 300, 84, new Color(46, 125, 50), TYPE.body);
@@ -593,6 +630,7 @@ export class MainMenu extends Component {
         this.state.mapIndex = (this.state.mapIndex + d + MAPS.length) % MAPS.length;
         this.mapLabel.string = t(this.mapDef().nameKey);
         this.drawPreview();
+        punchScale(this.mapPreview.node, 1.05, 0.14);
     }
     private drawPreview() {
         const g = this.mapPreview;
@@ -658,6 +696,11 @@ export class MainMenu extends Component {
                         g.circle(px + C / 2, py + C / 2, 3.5);
                         g.fill();
                         break;
+                    case 'X':
+                        g.fillColor = new Color(220, 45, 45);
+                        g.circle(px + C / 2, py + C / 2, 3.5);
+                        g.fill();
+                        break;
                 }
             }
         }
@@ -667,6 +710,136 @@ export class MainMenu extends Component {
         g.strokeColor = new Color(255, 255, 255, 40);
         g.roundRect(x0, y0, cols * C, rowsN * C, RADIUS.sm);
         g.stroke();
+    }
+
+    // ---- ambience ------------------------------------------------------------
+    /** Rotating sun rays + endlessly drifting clouds behind the menu. */
+    private buildAmbience(CW: number) {
+        // sun rays — a slow rotating fan where the sky's sun sits
+        const raysN = new Node('sunRays');
+        this.node.addChild(raysN);
+        ensureUT(raysN);
+        raysN.setPosition(CW * 0.32, 380, 0);
+        const rg = raysN.addComponent(Graphics);
+        rg.fillColor = new Color(255, 240, 180, 24);
+        for (let i = 0; i < 10; i++) {
+            const a0 = (i / 10) * Math.PI * 2;
+            const a1 = a0 + Math.PI / 10;
+            rg.moveTo(0, 0);
+            rg.lineTo(Math.cos(a0) * 320, Math.sin(a0) * 320);
+            rg.lineTo(Math.cos(a1) * 320, Math.sin(a1) * 320);
+            rg.close();
+        }
+        rg.fill();
+        this.loopTargets.push(raysN);
+        tween(raysN)
+            .repeatForever(tween(raysN).to(26, { angle: 360 }))
+            .start();
+
+        // three parallax cloud layers drifting across the sky
+        const cloudAlphas = [26, 18, 14];
+        for (let i = 0; i < 3; i++) {
+            const cN = new Node('cloud' + i);
+            this.node.addChild(cN);
+            ensureUT(cN);
+            const y = 300 - i * 90;
+            const scale = 1 + i * 0.5;
+            cN.setPosition(-CW / 2 - 220, y, 0);
+            cN.setScale(scale, scale, 1);
+            const cg = cN.addComponent(Graphics);
+            cg.fillColor = new Color(255, 255, 255, cloudAlphas[i]);
+            cg.ellipse(0, 0, 110, 26);
+            cg.fill();
+            cg.ellipse(60, 12, 70, 20);
+            cg.fill();
+            cg.ellipse(-70, 10, 60, 18);
+            cg.fill();
+            this.loopTargets.push(cN);
+            const dist = CW + 520;
+            const dur = dist / (26 + i * 9);
+            tween(cN)
+                .repeatForever(
+                    tween(cN)
+                        .by(dur, { position: new Vec3(dist, 0, 0) }, { easing: 'linear' })
+                        .to(0.01, { position: new Vec3(-CW / 2 - 220, y, 0) })
+                        .union(),
+                )
+                .start();
+        }
+    }
+
+    // ---- settings panel ------------------------------------------------------
+    /** Player preferences: screen shake, effect density, FPS readout. */
+    private openSettingsPanel() {
+        if (this.panelNode && this.panelNode.isValid) this.closePanel();
+        const W = 1920, H = 1080;
+        const CW = Math.max(W, coverSize().w);
+        const pn = new Node('settingsPanel');
+        this.node.addChild(pn);
+        pn.addComponent(UITransform);
+        this.panelNode = pn;
+        const g = pn.addComponent(Graphics);
+        g.fillColor = new Color(8, 10, 16, 240);
+        g.rect(-CW / 2, -H / 2, CW, H);
+        g.fill();
+        popIn(pn, DUR.medium);
+
+        const lblN = (str: string, x: number, y: number, size: number, color?: Color) => {
+            const n = new Node('slbl' + x + '_' + y);
+            pn.addChild(n);
+            ensureUT(n);
+            n.setPosition(x, y, 0);
+            const l = n.addComponent(Label);
+            l.string = str;
+            l.fontSize = size;
+            l.lineHeight = Math.floor(size * 1.3);
+            l.color = color ?? new Color(235, 235, 235);
+            (n.getComponent(UITransform)!).setContentSize(500, size * 1.4);
+            return l;
+        };
+
+        lblN(t('settings'), 0, 400, TYPE.h1, new Color(255, 226, 150));
+        const onOff = (v: boolean) => (v ? t('on') : t('off'));
+        // value buttons re-render their own label from live settings
+        const valueBtn = (
+            label: string, y: number, valueFn: () => string, toggle: () => void,
+        ) => {
+            lblN(label, -220, y, TYPE.body, new Color(200, 205, 215));
+            const btn = makeButton(pn, {
+                text: valueFn(), x: 300, y, w: 300, h: 76,
+                fill: new Color(46, 125, 50),
+                onClick: () => {
+                    toggle();
+                    btn.getComponentInChildren(Label)!.string = valueFn();
+                },
+            });
+        };
+
+        valueBtn(t('shake'), 240,
+            () => onOff(getSettings().shake),
+            () => updateSettings({ shake: !getSettings().shake }));
+        valueBtn(t('particles'), 110,
+            () => [t('low'), t('med'), t('high')][getSettings().density],
+            () => updateSettings({
+                density: ((getSettings().density + 1) % 3) as 0 | 1 | 2,
+            }));
+        valueBtn(t('sfx'), -20,
+            () => (getSettings().sfx > 0 ? `${Math.round(getSettings().sfx * 100)}%` : t('off')),
+            () => {
+                const cur = getSettings().sfx;
+                const next = cur >= 0.8 ? 0 : cur === 0 ? 0.5 : 0.8;
+                updateSettings({ sfx: next });
+                if (next > 0) Sfx.playShoot(WeaponId.RIFLE);
+            });
+        valueBtn(t('fps'), -150,
+            () => onOff(getSettings().showFps),
+            () => updateSettings({ showFps: !getSettings().showFps }));
+
+        makeButton(pn, {
+            text: t('done'), x: 0, y: -340, w: 300, h: 84,
+            fill: new Color(46, 125, 50),
+            onClick: () => this.closePanel(),
+        });
     }
 
     // ---- widget helpers ----
@@ -685,10 +858,27 @@ export class MainMenu extends Component {
         return l;
     }
 
-    private title(str: string, x: number, y: number, size: number, color?: Color) {
+    private title(str: string, x: number, y: number, size: number, color?: Color): Node {
+        // container node holds a soft shadow child under the main label, so
+        // entrance/bob tweens move both layers together
         const n = new Node('title' + y);
         this.node.addChild(n);
-        this.makeLabel(n, str, x, y, size, color ?? new Color(255, 226, 150));
+        const shN = new Node('shadow');
+        n.addChild(shN);
+        ensureUT(shN);
+        shN.setPosition(5, -5, 0);
+        const sh = shN.addComponent(Label);
+        sh.string = str;
+        sh.fontSize = size;
+        sh.lineHeight = Math.floor(size * 1.25);
+        sh.isBold = size >= 44;
+        sh.color = new Color(0, 0, 0, 130);
+        sh.overflow = Label.Overflow.SHRINK;
+        (shN.getComponent(UITransform)!).setContentSize(700, size * 1.4);
+        const mn = new Node('main');
+        n.addChild(mn);
+        this.makeLabel(mn, str, 0, 0, size, color ?? new Color(255, 226, 150));
+        return n;
     }
 
     private button(text: string, x: number, y: number, onClick: () => void,
