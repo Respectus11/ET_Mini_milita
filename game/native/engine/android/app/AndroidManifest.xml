@@ -13,13 +13,14 @@
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
 
+  <!-- Application configuration -->
   <application
-      android:extractNativeLibs="true"       <!-- Extract .so files before loading (required by Cocos) -->
-      android:allowBackup="true"             <!-- Allow Android auto-backup -->
-      android:label="@string/app_name"       <!-- Human-readable app name from strings.xml -->
-      android:usesCleartextTraffic="true"    <!-- Allow HTTP (needed for some ad networks) -->
-      android:icon="@mipmap/ic_launcher"     <!-- App icon -->
-      android:resizeableActivity="true">     <!-- Support split-screen / multi-window -->
+      android:extractNativeLibs="true"
+      android:allowBackup="true"
+      android:label="@string/app_name"
+      android:usesCleartextTraffic="true"
+      android:icon="@mipmap/ic_launcher"
+      android:resizeableActivity="true">
 
     <!-- Native library name — maps to libcocos.so loaded by CocosActivity. -->
     <meta-data android:name="android.app.lib_name"

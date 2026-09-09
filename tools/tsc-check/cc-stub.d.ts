@@ -38,6 +38,7 @@ declare module 'cc' {
     export class Component {
         node: Node;
         enabled: boolean;
+        readonly isValid: boolean;
         schedule(callback: (dt: number) => void, interval?: number): void;
         scheduleOnce(callback: (...args: any[]) => void, delay?: number): void;
         unschedule(callback: (...args: any[]) => void): void;
@@ -100,15 +101,21 @@ declare module 'cc' {
         fontSize: number;
         lineHeight: number;
         isBold: boolean;
+        isItalic: boolean;
         color: Color;
         overflow: any;
+        horizontalAlign: any;
+        verticalAlign: any;
         enableOutline: boolean;
         outlineColor: Color;
         outlineWidth: number;
         enableShadow: boolean;
         shadowColor: Color;
         shadowOffset: Vec2;
-        static Overflow: Record<string, any>;
+        shadowBlur: number;
+        static HorizontalAlign: { LEFT: number; CENTER: number; RIGHT: number };
+        static VerticalAlign: { TOP: number; CENTER: number; BOTTOM: number };
+        static Overflow: { NONE: number; CLAMP: number; SHRINK: number; RESIZE_HEIGHT: number };
     }
 
     export class EditBox extends Component {
@@ -116,6 +123,20 @@ declare module 'cc' {
         placeholder: string;
         maxLength: number;
     }
+
+    export class ImageAsset {}
+    export class SpriteFrame {
+        static createWithImage(image: ImageAsset): SpriteFrame;
+    }
+    export class Sprite extends Component {
+        spriteFrame: SpriteFrame | null;
+        sizeMode: number;
+        static SizeMode: { CUSTOM: number; TRIMMED: number; RAW: number };
+    }
+
+    export const assetManager: {
+        loadRemote<T = any>(url: string, onComplete: (err: Error | null, asset: T) => void): void;
+    };
 
     // ---- view ----------------------------------------------------------------
     export const view: {

@@ -20,6 +20,7 @@ COCOS_ENGINE_PATH = COCOS_ENGINE_PATH.replace("\\", "/")
 
 // Build output goes to the Cocos Creator export directory so assets stay in sync.
 buildDir = "${RES_PATH}/proj/build/${project.name ==~ /^[_a-zA-Z0-9-]+$/ ? project.name : 'CocosGame'}"
+println "DEBUG_PROP_APP_ABI is: '${project.findProperty('PROP_APP_ABI')}'"
 
 android {
     // -----------------------------------------------------------------------
@@ -27,7 +28,7 @@ android {
     // -----------------------------------------------------------------------
     compileSdkVersion PROP_COMPILE_SDK_VERSION.toInteger()
     buildToolsVersion PROP_BUILD_TOOLS_VERSION
-    ndkPath           PROP_NDK_PATH
+    ndkPath           "C:/Users/hp/AppData/Local/Android/Sdk/ndk/27.0.12077973"
     namespace         APPLICATION_ID   // R class package namespace
 
     compileOptions {
@@ -45,6 +46,9 @@ android {
         // -------------------------------------------------------------------
         // CMake / NDK configuration — builds the "cocos" shared library.
         // -------------------------------------------------------------------
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
+        }
         externalNativeBuild {
             cmake {
                 targets "cocos"
@@ -52,10 +56,7 @@ android {
                           "-DANDROID_STL=c++_static",
                           "-DANDROID_TOOLCHAIN=clang",
                           "-DANDROID_ARM_NEON=TRUE"
-            }
-            ndk {
-                // Build only for the ABIs listed in gradle.properties.
-                abiFilters PROP_APP_ABI.split(':')
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
             }
         }
     }
