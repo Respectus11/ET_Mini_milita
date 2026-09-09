@@ -11,9 +11,16 @@ import { Fighter } from './Fighter';
 import { PickupItem } from './PickupItem';
 import { WeaponCrate } from './WeaponCrate';
 import { ProjectileSystem } from './Projectile';
+import { ExplosiveBarrel } from './ExplosiveBarrel';
+import { Grenade } from './Grenade';
 import { TileWorld } from '../world/TileWorld';
 import { BotBrain } from '../ai/BotBrain';
 import { PeerMsg } from '../net/LanClient';
+import { Effects } from '../world/Effects';
+import { ScreenShake } from '../world/ScreenShake';
+import { Theme } from '../core/Theme';
+import { Sfx } from '../core/Audio';
+import { t } from '../data/Strings';
 
 export type NetRole = 'off' | 'host' | 'guest';
 
@@ -42,6 +49,13 @@ export class MatchManager extends Component {
     itemsRoot: Node = null!;   // buna / injera / mesob pickups
     crateRoot: Node = null!;   // weapon crates
     fighterRoot: Node = null!;
+    barrelsRoot: Node = null!; // explosive red barrels
+    grenadesRoot: Node = null!; // active hand grenades
+
+    barrels: ExplosiveBarrel[] = [];
+    grenades: Grenade[] = [];
+    private killStreaks: Map<number, { current: number; lastKillT: number; multikill: number }> = new Map();
+    private matchClock = 0;
 
     scores: Map<number, number> = new Map();
     timeLeft = CFG.MATCH_TIME;
@@ -60,6 +74,17 @@ export class MatchManager extends Component {
     private remoteInput: Extract<PeerMsg, { m: 'input' }> | null = null;
     private guestDots: Node[] = [];
 
+    // ---- juice layer -------------------------------------------------------
+    fx!: Effects;                    // pooled world-space VFX
+    shake = new ScreenShake();       // trauma-based screen shake
+    frozen = false;                  // countdown hold (host/offline)
+    hitStopT = 0;                    // brief slow-mo on big impacts
+    private shakeBaseX = 0;
+    private shakeBaseY = 0;
+    private prevHp = new Map<number, number>();
+    private aimG: Graphics | null = null;
+    private aimWasOn = false;
+
     // callbacks injected by GameRoot
     onEnd: ((winnerId: number | null) => void) | null = null;
     touchApply: ((f1: Fighter, f2: Fighter | null) => void) | null = null;
@@ -72,36 +97,49 @@ export class MatchManager extends Component {
 
         ensureUT(this.node);
         // Shift the whole match subtree so world (0,0) sits at the
-        // arena's bottom-left on screen. Fighters, pickups, crates and
-        // projectiles all use raw world coordinates — aligning the ROOT
+        // arena's bottom-left on screen. Fighters, pickups, crates, barrels,
+        // and projectiles all use raw world coordinates — aligning the ROOT
         // keeps every entity in register with the painted tiles.
         this.node.setPosition(-this.world.worldW / 2, -this.world.worldH / 2, 0);
+        this.shakeBaseX = -this.world.worldW / 2;
+        this.shakeBaseY = -this.world.worldH / 2;
         const bg = this.node.addComponent(Graphics);
         this.world.drawStatic(bg, 0, 0);
+        this.fx = new Effects(this.node);
+        this.aimG = this.node.addComponent(Graphics);
 
         this.fighterRoot = new Node('fighters');
         this.itemsRoot = new Node('items');
         this.crateRoot = new Node('crates');
+        this.barrelsRoot = new Node('barrels');
+        this.grenadesRoot = new Node('grenades');
         ensureUT(this.fighterRoot);
         ensureUT(this.itemsRoot);
         ensureUT(this.crateRoot);
+        ensureUT(this.barrelsRoot);
+        ensureUT(this.grenadesRoot);
         this.node.addChild(this.fighterRoot);
         this.node.addChild(this.itemsRoot);
         this.node.addChild(this.crateRoot);
+        this.node.addChild(this.barrelsRoot);
+        this.node.addChild(this.grenadesRoot);
 
         this.projectiles = new ProjectileSystem({
             world: this.world,
             fighters: [],
-            onSplash: () => {},
+            barrels: this.barrels,
+            onSplash: (x: number, y: number) => this.onSplashFx(x, y),
         }, this.node);
 
+        this.spawnBarrels();
         this.spawnRoster();
         this.projectiles.host.fighters = this.fighters.map(f => ({
             x: f.x, y: f.y, w: f.w, h: f.h,
             get alive() { return f.alive; },
             ownerId: f.id,
             ref: f,
-            applyDamage: (d: number, k: number) => f.applyDamage(d, k),
+            applyDamage: (d: number, k: number, hitY?: number, isExp?: boolean) =>
+                f.applyDamage(d, k, hitY, isExp),
         }));
 
         this.spawnItems();
@@ -125,8 +163,11 @@ export class MatchManager extends Component {
             f.teamLabel = label;
             if (this.netRole === 'guest') f.netGhost = true;
             f.init(char, this.world);
+            f.fx = this.fx;
+            f.onNetDeath = () => this.shake.add(0.35);
             f.onShoot = (shooter) => this.fireWeapon(shooter);
             f.onMelee = (attacker) => this.resolveMelee(attacker);
+            f.onThrowGrenade = (shooter, vx, vy) => this.throwGrenade(shooter, vx, vy);
             this.scores.set(f.id, 0);
             return f;
         };
@@ -178,16 +219,16 @@ export class MatchManager extends Component {
     /** Returns [x,y] avoiding proximity to living enemies. */
     private safeSpawn(kind: 'p' | 'q' | 'e'): [number, number] {
         let best = this.world.randomSpawn(kind);
-        let bestScore = -Infinity;
-        for (let i = 0; i < 8; i++) {
-            const s = this.world.randomSpawn(kind);
-            let nearestEnemy = Infinity;
+        let bestMinDist = -1;
+        for (let i = 0; i < 5; i++) {
+            const cand = this.world.randomSpawn(kind);
+            let minDist = Infinity;
             for (const f of this.fighters) {
                 if (!f.alive) continue;
-                nearestEnemy = Math.min(nearestEnemy, Math.hypot(f.x - s.x, f.y - s.y));
+                const d = Math.hypot(f.x - cand.x, f.y - cand.y);
+                if (d < minDist) minDist = d;
             }
-            const score = nearestEnemy === Infinity ? 9999 : nearestEnemy;
-            if (score > bestScore) { bestScore = score; best = s; }
+            if (minDist > bestMinDist) { bestMinDist = minDist; best = cand; }
         }
         return [best.x, best.y];
     }
@@ -195,10 +236,11 @@ export class MatchManager extends Component {
     /** Buna / injera / mesob pickups on their map markers. */
     private spawnItems() {
         for (const s of this.world.itemSpawns) {
-            if (s.ch === 'W') continue;
-            const n = new Node('item_' + s.ch);
+            if (s.ch === 'W' || s.ch === 'X') continue;
+            const n = new Node('pickup_' + s.ch);
             this.itemsRoot.addChild(n);
             const it = n.addComponent(PickupItem);
+            it.fx = this.fx;
             switch (s.ch) {
                 case 'B': it.setup('buna', s.cx, s.cy); break;
                 case 'I': it.setup('injera', s.cx, s.cy); break;
@@ -213,7 +255,72 @@ export class MatchManager extends Component {
             if (s.ch !== 'W') continue;
             const n = new Node('crate');
             this.crateRoot.addChild(n);
-            n.addComponent(WeaponCrate).setup(s.cx, s.cy);
+            const crate = n.addComponent(WeaponCrate);
+            crate.fx = this.fx;
+            crate.setup(s.cx, s.cy);
+        }
+    }
+
+    /** Spawn explosive barrels from map 'X' markers. */
+    private spawnBarrels() {
+        for (const sp of this.world.barrelSpawns) {
+            const n = new Node('barrel');
+            this.barrelsRoot.addChild(n);
+            const b = n.addComponent(ExplosiveBarrel);
+            b.init(sp.x, sp.y, this.fx);
+            b.onDetonate = (barrel, killerId) => this.onBarrelDetonate(barrel, killerId);
+            this.barrels.push(b);
+        }
+    }
+
+    private onBarrelDetonate(b: ExplosiveBarrel, killerId: number) {
+        this.onSplashFx(b.x, b.y);
+        const radius = 160;
+        const maxDmg = 80;
+        for (const f of this.fighters) {
+            if (!f.alive) continue;
+            const d = Math.hypot(f.x - b.x, f.y - b.y);
+            if (d < radius) {
+                const falloff = 1 - (d / radius) * 0.6;
+                f.applyDamage(Math.round(maxDmg * falloff), killerId, b.y, true);
+            }
+        }
+        for (const other of this.barrels) {
+            if (other === b || !other.alive) continue;
+            const d = Math.hypot(other.x - b.x, other.y - b.y);
+            if (d < radius) {
+                // Chain reaction detonation
+                other.applyDamage(maxDmg, killerId);
+            }
+        }
+    }
+
+    /** Throw a Mini Militia hand grenade into the match arena. */
+    throwGrenade(f: Fighter, vx: number, vy: number) {
+        if (this.netRole === 'guest') return;
+        const g = this.grenades.find(gr => !gr.active) ?? new Grenade(this.grenadesRoot);
+        if (!this.grenades.includes(g)) this.grenades.push(g);
+        g.spawn(f.id, f.x + f.faceDir * 18, f.y + 8, vx, vy, this.fx);
+    }
+
+    private onDetonateGrenade(g: Grenade) {
+        this.onSplashFx(g.x, g.y);
+        const radius = 150;
+        const maxDmg = 90;
+        for (const f of this.fighters) {
+            if (!f.alive) continue;
+            const d = Math.hypot(f.x - g.x, f.y - g.y);
+            if (d < radius) {
+                const falloff = 1 - (d / radius) * 0.65;
+                f.applyDamage(Math.round(maxDmg * falloff), g.ownerId, g.y, true);
+            }
+        }
+        for (const b of this.barrels) {
+            if (!b.alive) continue;
+            const d = Math.hypot(b.x - g.x, b.y - g.y);
+            if (d < radius) {
+                b.applyDamage(Math.round(maxDmg * (1 - d / radius * 0.5)), g.ownerId);
+            }
         }
     }
 
@@ -228,10 +335,14 @@ export class MatchManager extends Component {
             const col = w.id === WeaponId.LAUNCHER ? new Color(255, 120, 40)
                 : w.id === WeaponId.SNIPER ? new Color(140, 255, 140)
                 : w.id === WeaponId.SMG ? new Color(150, 235, 255)
+                : w.id === WeaponId.PLASMA ? new Color(0, 240, 255)
+                : w.id === WeaponId.MAGNUM ? new Color(255, 215, 0)
                 : new Color(255, 240, 120);
             this.projectiles.spawn(f.id, muzzleX, muzzleY, ang,
                 w.speed * (0.95 + Math.random() * 0.1), w, col);
         }
+        // heavy guns kick the screen a little
+        if (w.recoil >= 150) this.shake.add(0.06);
     }
 
     private resolveMelee(a: Fighter) {
@@ -244,6 +355,11 @@ export class MatchManager extends Component {
                 t.applyDamage(CFG.MELEE_DMG, a.id);
                 t.vx += Math.sign(dx || a.faceDir) * 320;
                 t.vy = Math.max(t.vy, 260);
+                this.shake.add(0.08);
+                this.fx.burst({
+                    x: t.x, y: t.y + t.h * 0.2, count: 5,
+                    speed: 190, size: 3.5, life: 0.25,
+                });
             }
         }
     }
@@ -255,6 +371,51 @@ export class MatchManager extends Component {
         const victim = this.fighters.find(f => f.id === victimId);
         if (victim) this.respawnQueue.push({ f: victim, t: CFG.RESPAWN_TIME });
 
+        // ---- juice: pop, shake, hit-stop (host/offline only) ----
+        if (this.netRole !== 'guest' && victim) {
+            this.fx.confetti(victim.x, victim.y, [
+                victim.char.body, victim.char.accent,
+                Theme.gold, Theme.flagGreen, Theme.flagRed,
+            ], 30);
+            this.fx.floatText(victim.x, victim.y + 40, 'KO!', Theme.goldHi, 40);
+            this.shake.add(0.5);
+            this.hitStopT = 0.07;
+        }
+
+        // Killstreak calculation
+        if (killerId !== victimId) {
+            const vSt = this.killStreaks.get(victimId);
+            if (vSt) { vSt.current = 0; vSt.multikill = 0; }
+
+            let kSt = this.killStreaks.get(killerId);
+            if (!kSt) {
+                kSt = { current: 0, lastKillT: 0, multikill: 0 };
+                this.killStreaks.set(killerId, kSt);
+            }
+            if (this.matchClock - kSt.lastKillT < 3.8) {
+                kSt.multikill++;
+            } else {
+                kSt.multikill = 1;
+            }
+            kSt.lastKillT = this.matchClock;
+            kSt.current++;
+
+            let streakBadge = '';
+            if (kSt.multikill === 2) streakBadge = 'double_kill';
+            else if (kSt.multikill === 3) streakBadge = 'triple_kill';
+            else if (kSt.current === 5) streakBadge = 'rampage';
+            else if (kSt.current >= 7) streakBadge = 'unstoppable';
+
+            if (streakBadge) {
+                Sfx.playKillstreak(kSt.current);
+                bus.emit(Evt.KILLSTREAK, killerId, streakBadge, kSt.current);
+                const kf = this.fighters.find(f => f.id === killerId);
+                if (kf && this.fx) {
+                    this.fx.floatText(kf.x, kf.y + 60, t(streakBadge), Theme.goldHi, 44);
+                }
+            }
+        }
+
         const killer = this.fighters.find(f => f.id === killerId);
         if (killer && (this.scores.get(killerId) ?? 0) >= CFG.FRAG_LIMIT) {
             this.endMatch(killerId);
@@ -264,6 +425,7 @@ export class MatchManager extends Component {
     private endMatch(winnerId: number | null) {
         if (this.matchOver) return;
         this.matchOver = true;
+        Sfx.playVictory();
         if (this.netRole === 'host' && this.netSend) {
             this.netSend({ m: 'end', winnerId });
         }
@@ -322,6 +484,7 @@ export class MatchManager extends Component {
                 sp: Math.round(f.speedT),
                 sh: Math.round(f.shieldHp),
                 wp: WEAPON_LIST.indexOf(f.weapon.id),
+                wp2: f.weapon2 ? WEAPON_LIST.indexOf(f.weapon2.id) : -1,
             })),
             ps: this.projectiles.liveCoords(),
         };
@@ -382,11 +545,17 @@ export class MatchManager extends Component {
     /** Fire-intent flags injected by GameRoot (touch stick / mouse). */
     guestFireTouch = false;
     guestFireKeys = false;
+    guestReload = false;
+    guestGrenade = false;
 
     /** GUEST: relay the local player's inputs to the host at ~30 Hz. */
     private sendLocalInput() {
         if (!this.netSend || this.humans.length < 2) return;
         const me = this.humans[1];
+        const doReload = this.guestReload;
+        const doGrenade = this.guestGrenade;
+        this.guestReload = false;
+        this.guestGrenade = false;
         this.netSend({
             m: 'input',
             mx: me.moveIn.mx,
@@ -396,7 +565,8 @@ export class MatchManager extends Component {
             ay: me.aimIn.ay,
             aim: me.aimIn.aiming,
             fire: this.guestFireTouch || this.guestFireKeys,
-            rl: false,
+            rl: doReload,
+            gr: doGrenade,
         });
     }
 
@@ -412,11 +582,20 @@ export class MatchManager extends Component {
         if (r.aim) { p2.aimIn.ax = r.ax; p2.aimIn.ay = r.ay; }
         if (r.fire) p2.tryFire();
         if (r.rl) p2.startReload();
+        if (r.gr) p2.tryThrowGrenade();
     }
 
     private tick(dt: number) {
         if (this.matchOver) return;
-        dt = Math.min(dt, 1 / 30);
+        const rdt = Math.min(dt, 1 / 30);
+        this.hitStopT = Math.max(0, this.hitStopT - rdt);
+        const sdt = rdt * (this.hitStopT > 0 ? 0.12 : 1);
+
+        // juice runs in real time — shake keeps decaying during hit-stop
+        const [ox, oy] = this.shake.offset(rdt);
+        this.node.setPosition(this.shakeBaseX + ox, this.shakeBaseY + oy, 0);
+        this.fx.tick(rdt);
+        this.drawAimTicks();
 
         // ---- GUEST: mirror-only mode -------------------------------------
         if (this.netRole === 'guest') {
@@ -426,7 +605,7 @@ export class MatchManager extends Component {
             if (this.keyboardApply && this.humans[0]) {
                 this.keyboardApply(this.humans[0]);
             }
-            this.inputT += dt;
+            this.inputT += rdt;
             if (this.inputT >= 1 / 30) {
                 this.inputT = 0;
                 this.sendLocalInput();
@@ -434,8 +613,12 @@ export class MatchManager extends Component {
             return;
         }
 
+        if (this.frozen) return; // countdown hold — the world waits for GO
+
         // ---- HOST / OFFLINE simulation ------------------------------------
-        this.timeLeft -= dt;
+        this.matchClock += sdt;
+        this.trackDamage();
+        this.timeLeft -= sdt;
         if (this.timeLeft <= 0) {
             this.endMatch(this.leaderId());
             return;
@@ -446,10 +629,18 @@ export class MatchManager extends Component {
         if (this.netRole === 'host') this.applyRemoteInput();
 
         for (const b of this.bots) {
-            b.tick(dt, this.fighters.filter(f => f !== b.me));
+            b.tick(sdt, this.fighters.filter(f => f !== b.me));
         }
 
-        for (const f of this.fighters) f.tick(dt);
+        for (const f of this.fighters) f.tick(sdt);
+
+        // tick explosive barrels
+        for (const b of this.barrels) b.tick(sdt);
+
+        // tick grenades
+        for (const gr of this.grenades) {
+            gr.tick(sdt, this.world, g => this.onDetonateGrenade(g));
+        }
 
         // sync projectile hitboxes
         const host = this.projectiles.host;
@@ -457,14 +648,14 @@ export class MatchManager extends Component {
             fr.x = fr.ref.x; fr.y = fr.ref.y;
         }
 
-        this.projectiles.tick(dt);
-        this.projectiles.tickFx(dt);
+        this.projectiles.tick(sdt);
+        this.projectiles.tickFx(rdt);
 
         // pickups: animate, respawn, collect
         for (const n of this.itemsRoot.children.slice()) {
             const it = n.getComponent(PickupItem);
             if (!it) continue; // ghost projectile nodes live here too
-            it.tick(dt);
+            it.tick(sdt);
             if (!it.taken) {
                 for (const f of this.fighters) it.tryTake(f);
             }
@@ -472,7 +663,7 @@ export class MatchManager extends Component {
         for (const n of this.crateRoot.children) {
             const c = n.getComponent(WeaponCrate);
             if (!c) continue;
-            c.tick(dt);
+            c.tick(sdt);
             if (!c.taken) {
                 for (const f of this.fighters) c.tryTake(f);
             }
@@ -480,7 +671,7 @@ export class MatchManager extends Component {
 
         for (let i = this.respawnQueue.length - 1; i >= 0; i--) {
             const r = this.respawnQueue[i];
-            r.t -= dt;
+            r.t -= sdt;
             if (r.t <= 0) {
                 const kind = r.f.teamLabel === 'P1' ? 'p' : r.f.teamLabel === 'P2' ? 'q' : 'e';
                 const sp = this.safeSpawn(kind as 'p' | 'q' | 'e');
@@ -490,7 +681,7 @@ export class MatchManager extends Component {
         }
 
         if (this.netRole === 'host') {
-            this.snapT += dt;
+            this.snapT += rdt;
             if (this.snapT >= 1 / 15) {
                 this.snapT = 0;
                 if (this.netSend) this.netSend(this.buildSnapshot());
@@ -511,4 +702,79 @@ export class MatchManager extends Component {
     scoreOf(id: number): number { return this.scores.get(id) ?? 0; }
 
     timeStr(): string { return fmtTime(Math.max(0, this.timeLeft)); }
+
+    /** Small screen kick whenever the LOCAL fighter takes damage. */
+    private trackDamage() {
+        for (const f of this.fighters) {
+            const prev = this.prevHp.get(f.id);
+            if (prev !== undefined && f.hp < prev && f.id === this.myFighterId) {
+                this.shake.add(0.16);
+            }
+            this.prevHp.set(f.id, f.hp);
+        }
+    }
+
+    /** Grenade splash: the big one — flash, rings, sparks, debris, smoke. */
+    private onSplashFx(x: number, y: number) {
+        this.fx.explosion(x, y, 130);
+        this.shake.add(0.45);
+        this.hitStopT = Math.max(this.hitStopT, 0.05);
+        Sfx.playExplosion();
+    }
+
+    /** Aim guidance: red laser sight for sniper, tactical dots for other weapons. */
+    private drawAimTicks() {
+        const g = this.aimG;
+        if (!g) return;
+        const me = this.fighters.find(f => f.id === this.myFighterId);
+        const show = !!me && me.alive && me.aimIn.aiming;
+        if (!show) {
+            if (this.aimWasOn) { g.clear(); this.aimWasOn = false; }
+            return;
+        }
+        this.aimWasOn = true;
+        g.clear();
+        const ang = Math.atan2(me!.aimIn.ay, me!.aimIn.ax);
+
+        // Tactical Sniper Laser Sight: long red laser tracer to obstacle/enemy
+        if (me!.weapon.id === WeaponId.SNIPER) {
+            const maxRange = 1500;
+            const hit = this.world.raycast(me!.x, me!.y + me!.h * 0.06, Math.cos(ang) * maxRange, Math.sin(ang) * maxRange);
+            const lx = hit.hit ? hit.x : me!.x + Math.cos(ang) * maxRange;
+            const ly = hit.hit ? hit.y : me!.y + me!.h * 0.06 + Math.sin(ang) * maxRange;
+
+            // Outer laser beam glow
+            g.strokeColor = new Color(255, 30, 30, 110);
+            g.lineWidth = 4.5;
+            g.moveTo(me!.x + Math.cos(ang) * 22, me!.y + me!.h * 0.06 + Math.sin(ang) * 22);
+            g.lineTo(lx, ly);
+            g.stroke();
+
+            // Core sharp laser line
+            g.strokeColor = new Color(255, 230, 230, 240);
+            g.lineWidth = 1.6;
+            g.moveTo(me!.x + Math.cos(ang) * 22, me!.y + me!.h * 0.06 + Math.sin(ang) * 22);
+            g.lineTo(lx, ly);
+            g.stroke();
+
+            // Laser contact point red dot
+            g.fillColor = new Color(255, 30, 30, 220);
+            g.circle(lx, ly, 4.5);
+            g.fill();
+            g.fillColor = new Color(255, 255, 255, 250);
+            g.circle(lx, ly, 2);
+            g.fill();
+            return;
+        }
+
+        const col = me!.char.accent;
+        for (let i = 0; i < 3; i++) {
+            const d = 46 + i * 15;
+            const px = me!.x + Math.cos(ang) * d;
+            const py = me!.y + me!.h * 0.06 + Math.sin(ang) * d;
+            g.fillColor = new Color(col.r, col.g, col.b, 210 - i * 65);
+            g.circle(px, py, 3.6 - i * 0.8);
+            g.fill();
+        }
+    }
 }
