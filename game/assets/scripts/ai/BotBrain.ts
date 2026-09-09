@@ -32,12 +32,17 @@ export class BotBrain {
     private strafeDir = 1;
     private strafeT = 0;
 
+    private grenadeTimer = rand(2.5, 6);
+    private dodgeTimer = 0;
+
     constructor(public me: Fighter, private world: TileWorld) {}
 
     tick(dt: number, foes: Fighter[]) {
         if (!this.me.alive) return;
         this.stateT += dt;
         this.jumpT -= dt;
+        this.grenadeTimer -= dt;
+        this.dodgeTimer -= dt;
 
         const foe = this.nearestVisibleFoe(foes);
         const lowHp = this.me.hp < 30;
@@ -86,21 +91,37 @@ export class BotBrain {
                 const dx = foe.x - this.me.x;
                 const dy = foe.y - this.me.y;
                 const dist = Math.hypot(dx, dy);
-                const ideal = 300;
+                const ideal = 280;
                 this.strafeT -= dt;
                 if (this.strafeT <= 0) { this.strafeDir *= -1; this.strafeT = rand(0.5, 1.4); }
                 m.mx = Math.abs(dist - ideal) < 80 ? this.strafeDir * 0.7 : Math.sign(dx);
-                if (dy > CFG.TILE && this.me.grounded && this.fuelOk()) m.jet = true;
+
+                // Tactical jetpack lift & dodging
+                if (dy > CFG.TILE * 0.5 && this.fuelOk()) m.jet = true;
+                if (dist < 400 && Math.random() < 0.03 && this.fuelOk()) {
+                    m.jet = true;
+                }
+
                 if (Math.abs(dx) < CFG.MELEE_RANGE && dist < CFG.MELEE_RANGE + 30) {
                     this.me.tryMelee(foe);
                 }
-                // aim with slight lead & wobble
-                const lead = clamp(Math.atan2(dy + 10, dx), -Math.PI, Math.PI);
-                const wob = rand(-0.06, 0.06);
+
+                // Tactical grenade toss if enemy is at good distance or bunched up
+                if (this.grenadeTimer <= 0 && dist > 160 && dist < 480 && this.me.grenades > 0) {
+                    this.me.aimIn.ax = dx / dist;
+                    this.me.aimIn.ay = Math.max(0.3, dy / dist + 0.35); // arc upward
+                    this.me.tryThrowGrenade();
+                    this.grenadeTimer = rand(5, 10);
+                }
+
+                // aim with slight lead & headshot bias
+                const headLeadY = dy + 18; // bias aim slightly upward towards head!
+                const lead = clamp(Math.atan2(headLeadY, dx), -Math.PI, Math.PI);
+                const wob = rand(-0.05, 0.05);
                 this.me.aimIn.ax = Math.cos(lead + wob);
                 this.me.aimIn.ay = Math.sin(lead + wob);
                 this.me.aimIn.aiming = true;
-                if (dist < 700) this.me.tryFire();
+                if (dist < 720) this.me.tryFire();
                 break;
             }
             case 'RETREAT': {
@@ -113,7 +134,12 @@ export class BotBrain {
                     this.me.aimIn.ax = Math.cos(ang);
                     this.me.aimIn.ay = Math.sin(ang);
                     this.me.aimIn.aiming = true;
-                    if (Math.random() < 0.35) this.me.tryFire();
+                    if (Math.random() < 0.4) this.me.tryFire();
+                    // drop defensive grenade behind
+                    if (this.grenadeTimer <= 0 && this.me.grenades > 0) {
+                        this.me.tryThrowGrenade();
+                        this.grenadeTimer = rand(5, 9);
+                    }
                 } else {
                     m.mx = this.wanderDir;
                 }
