@@ -15,6 +15,8 @@ export enum WeaponId {
     SNIPER = 'sniper',
     LAUNCHER = 'launcher',
     SMG = 'smg',
+    MAGNUM = 'magnum',
+    PLASMA = 'plasma',
 }
 
 export interface WeaponDef {
@@ -31,6 +33,7 @@ export interface WeaponDef {
     splashRadius: number; // explosion radius; 0 = single-target hit
     recoil: number;       // self-knockback impulse on firing
     auto: boolean;        // true = hold to keep firing
+    oneHanded?: boolean;  // can be dual-wielded with another one-handed weapon
     visual: GunVisual;    // how the held gun + crate tint are drawn
 }
 
@@ -111,6 +114,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
         dmg: 8, pellets: 1, rof: 13, spreadDeg: 5, speed: 1250,
         magSize: 36, reloadTime: 1.1, gravityScale: 0,
         splashRadius: 0, recoil: 22, auto: true,
+        oneHanded: true,
         visual: {
             body: 0x37474f, accent: 0x26c6da,
             barrelLen: 20, barrelH: 8,
@@ -118,16 +122,44 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
             flashSize: 9,
         },
     },
+    // Heavy Desert Eagle hand cannon — high stopping power, fast double tap.
+    [WeaponId.MAGNUM]: {
+        id: WeaponId.MAGNUM, nameKey: 'w_magnum',
+        dmg: 28, pellets: 1, rof: 3.5, spreadDeg: 1.5, speed: 2200,
+        magSize: 7, reloadTime: 1.2, gravityScale: 0,
+        splashRadius: 0, recoil: 120, auto: false,
+        oneHanded: true,
+        visual: {
+            body: 0x90a4ae, accent: 0xffd54f,
+            barrelLen: 18, barrelH: 10,
+            stock: false, mag: false, scope: false, pump: false, tube: false,
+            flashSize: 14,
+        },
+    },
+    // High-tech energy carbine — hyper rapid plasma burst stream.
+    [WeaponId.PLASMA]: {
+        id: WeaponId.PLASMA, nameKey: 'w_plasma',
+        dmg: 7, pellets: 1, rof: 16, spreadDeg: 3, speed: 1900,
+        magSize: 45, reloadTime: 1.5, gravityScale: 0,
+        splashRadius: 0, recoil: 16, auto: true,
+        visual: {
+            body: 0x263238, accent: 0x00e5ff,
+            barrelLen: 28, barrelH: 8,
+            stock: true, mag: false, scope: false, pump: false, tube: false,
+            flashSize: 11,
+        },
+    },
 };
 
 /** Stable index order for LAN snapshots (weapon id -> wire index). */
 export const WEAPON_LIST: WeaponId[] = [
     WeaponId.RIFLE, WeaponId.SHOTGUN, WeaponId.SNIPER,
-    WeaponId.LAUNCHER, WeaponId.SMG,
+    WeaponId.LAUNCHER, WeaponId.SMG, WeaponId.MAGNUM, WeaponId.PLASMA,
 ];
 
 /** Crates roll from this pool (weights emerge from repetition). */
 export const CRATE_POOL: WeaponId[] = [
     WeaponId.RIFLE, WeaponId.RIFLE, WeaponId.SHOTGUN,
-    WeaponId.SMG, WeaponId.SMG, WeaponId.SNIPER, WeaponId.LAUNCHER,
+    WeaponId.SMG, WeaponId.SMG, WeaponId.SNIPER,
+    WeaponId.LAUNCHER, WeaponId.MAGNUM, WeaponId.PLASMA,
 ];
