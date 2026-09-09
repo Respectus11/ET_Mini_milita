@@ -37,15 +37,20 @@ export class KeyboardControls extends Component {
     private onKey(e: EventKeyboard) {
         this.keys.add(e.keyCode);
         if (e.keyCode === KeyCode.KEY_R) this.reloadRequest = true;
+        if (e.keyCode === KeyCode.KEY_G) this.grenadeRequest = true;
     }
     private onKeyUp(e: EventKeyboard) { this.keys.delete(e.keyCode); }
 
     reloadRequest = false;
+    grenadeRequest = false;
+    onReload: (() => void) | null = null;
+    onGrenade: (() => void) | null = null;
 
     private onMouse(e: any) {
-        // only the primary button fires — right/middle clicks are ignored
-        this.mouseDown = e.getType() === Input.EventType.MOUSE_DOWN &&
-            e.getButton?.() === 0;
+        if (e.getType() === Input.EventType.MOUSE_DOWN) {
+            if (e.getButton?.() === 0) this.mouseDown = true;
+            else if (e.getButton?.() === 2) this.grenadeRequest = true; // Right click = throw grenade!
+        }
     }
     private onMouseMove(e: any) {
         const p = e.getUILocation();
@@ -77,6 +82,15 @@ export class KeyboardControls extends Component {
         } else {
             f.aimIn.aiming = false;
         }
-        if (this.reloadRequest) { f.startReload(); this.reloadRequest = false; }
+        if (this.reloadRequest) {
+            f.startReload();
+            this.reloadRequest = false;
+            this.onReload?.();
+        }
+        if (this.grenadeRequest) {
+            f.tryThrowGrenade();
+            this.grenadeRequest = false;
+            this.onGrenade?.();
+        }
     }
 }
