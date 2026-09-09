@@ -23,6 +23,7 @@ export type PeerMsg =
         mx: number; jet: boolean; drop: boolean;
         ax: number; ay: number; aim: boolean; fire: boolean;
         rl: boolean;                            // reload request
+        gr?: boolean;                           // grenade throw request
       }
     | {
         m: 'snap';
@@ -46,6 +47,7 @@ export interface NetFighterState {
     sp: number;  // buna speed timer remaining
     sh: number;  // shield hp remaining
     wp?: number; // weapon index into WEAPON_LIST
+    wp2?: number;// secondary weapon index if dual wielding
 }
 
 export type RelayMsg =
