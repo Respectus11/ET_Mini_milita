@@ -18,6 +18,12 @@ declare module 'cc' {
         x: number; y: number; z: number;
         constructor(x?: number, y?: number, z?: number);
         clone(): Vec3;
+        set(x?: number, y?: number, z?: number): Vec3;
+    }
+
+    export class Vec2 {
+        x: number; y: number;
+        constructor(x?: number, y?: number);
     }
 
     export class Color {
@@ -44,6 +50,7 @@ declare module 'cc' {
         readonly isValid: boolean;
         readonly position: Readonly<Vec3>;
         readonly scale: Readonly<Vec3>;
+        angle: number;
         readonly children: Node[];
         constructor(name?: string);
         addChild(child: Node): void;
@@ -95,6 +102,12 @@ declare module 'cc' {
         isBold: boolean;
         color: Color;
         overflow: any;
+        enableOutline: boolean;
+        outlineColor: Color;
+        outlineWidth: number;
+        enableShadow: boolean;
+        shadowColor: Color;
+        shadowOffset: Vec2;
         static Overflow: Record<string, any>;
     }
 
@@ -108,8 +121,31 @@ declare module 'cc' {
     export const view: {
         getVisibleSize(): { width: number; height: number };
         setDesignResolutionSize(width: number, height: number, policy: any): void;
+        getSafeAreaRect(): { x: number; y: number; width: number; height: number };
+        setResizeCallback(callback: () => void): void;
+        on(event: string, callback: (...args: any[]) => void, target?: any): void;
     };
     export const ResolutionPolicy: Record<string, any>;
+
+    // ---- tween ---------------------------------------------------------------
+    export class Tween<T = any> {
+        to(duration: number, props: any, opts?: any): Tween<T>;
+        by(duration: number, props: any, opts?: any): Tween<T>;
+        delay(duration: number): Tween<T>;
+        call(fn: (...args: any[]) => void): Tween<T>;
+        union(): Tween<T>;
+        repeat(repeatTimes: number, embedTween?: Tween<T>): Tween<T>;
+        repeatForever(embedTween?: Tween<T>): Tween<T>;
+        start(): Tween<T>;
+        stop(): Tween<T>;
+        static stopAllByTarget(target: any): void;
+    }
+    export function tween(target?: any): Tween;
+
+    /** Subtree transparency flag — tween `opacity` (0-255) to fade groups. */
+    export class UIOpacity extends Component {
+        opacity: number;
+    }
 
     // ---- input ---------------------------------------------------------------
     /** Global input bus: register/unregister handlers by event type. */
@@ -146,6 +182,24 @@ declare module 'cc' {
             clear(): void;
         };
     };
+
+    // ---- director & engine lifecycle -----------------------------------------
+    export class Director {
+        static EVENT_AFTER_SCENE_LAUNCH: string;
+    }
+    export const director: {
+        on(event: string, callback: (...args: any[]) => void, target?: any): void;
+        once(event: string, callback: (...args: any[]) => void, target?: any): void;
+        off(event: string, callback?: (...args: any[]) => void, target?: any): void;
+        getScene(): any;
+        loadScene(sceneName: string, onLaunched?: () => void): boolean;
+    };
+    export class Canvas extends Component {
+        cameraComponent: any;
+        alignCanvasWithScreen: boolean;
+    }
+    export const js: any;
+    export const cclegacy: any;
 }
 
 declare const console: any;
