@@ -64,6 +64,26 @@ export function drawGun(g: Graphics, def: WeaponDef, flash01 = 0) {
         // muzzle tip
         g.fillColor = darkC;
         g.fillRect(gunMuzzleX(def) - 3, -v.barrelH / 2 - 1, 3.5, v.barrelH + 2);
+
+        // Special visual accents for Magnum and Plasma
+        if (def.id === 'plasma') {
+            // Glowing energy coils
+            g.fillColor = accC;
+            g.fillRect(12, -v.barrelH / 2 - 2, 3, v.barrelH + 4);
+            g.fillRect(18, -v.barrelH / 2 - 2, 3, v.barrelH + 4);
+            g.fillRect(24, -v.barrelH / 2 - 2, 3, v.barrelH + 4);
+            // Core capacitor
+            g.fillColor = new Color(255, 255, 255, 220);
+            g.circle(0, 0, 3.5);
+            g.fill();
+        } else if (def.id === 'magnum') {
+            // Heavy slide bevel
+            g.fillColor = accC;
+            g.fillRect(-2, -v.barrelH * 0.75, 4, 3);
+            g.fillColor = darkC;
+            g.fillRect(4, -v.barrelH * 0.75, 2, 4);
+            g.fillRect(8, -v.barrelH * 0.75, 2, 4);
+        }
     }
 
     // box magazine
@@ -101,6 +121,78 @@ export function drawGun(g: Graphics, def: WeaponDef, flash01 = 0) {
     g.stroke();
 
     if (flash01 > 0) drawFlash(g, def, flash01);
+}
+
+/**
+ * Draws dual-wield weapons: off-hand gun slightly lowered & back,
+ * main gun in front with distinct flash support.
+ */
+export function drawDualGuns(g: Graphics, primary: WeaponDef, secondary: WeaponDef, flash1 = 0, flash2 = 0) {
+    g.clear();
+    // Render secondary weapon behind (darkened tint via lower alpha / shadow offset)
+    drawSingleGunOffset(g, secondary, -4, -6, flash2, true);
+    // Render primary weapon in foreground
+    drawSingleGunOffset(g, primary, 2, 2, flash1, false);
+}
+
+function drawSingleGunOffset(g: Graphics, def: WeaponDef, ox: number, oy: number, flash01: number, isOffhand: boolean) {
+    const v = def.visual;
+    const bodyC = isOffhand ? col(v.body, 200) : col(v.body);
+    const accC = col(v.accent);
+    const darkC = col(0x1c1c22);
+
+    if (v.stock && !v.tube) {
+        g.fillColor = darkC;
+        g.moveTo(ox - 8, oy + 3);
+        g.lineTo(ox - 20, oy + 6);
+        g.lineTo(ox - 20, oy - 4);
+        g.lineTo(ox - 8, oy - 4);
+        g.close();
+        g.fill();
+    }
+
+    g.fillColor = bodyC;
+    g.roundRect(ox - 8, oy - v.barrelH * 0.75, 20, v.barrelH * 1.5, 3);
+    g.fill();
+    g.fillRect(ox + 10, oy - v.barrelH / 2, v.barrelLen, v.barrelH);
+    g.fillColor = darkC;
+    g.fillRect(ox + gunMuzzleX(def) - 3, oy - v.barrelH / 2 - 1, 3.5, v.barrelH + 2);
+
+    if (v.mag) {
+        g.fillColor = darkC;
+        g.moveTo(ox + 1, oy + v.barrelH * 0.75);
+        g.lineTo(ox + 9, oy + v.barrelH * 0.75);
+        g.lineTo(ox + 7, oy + v.barrelH * 0.75 + 13);
+        g.lineTo(ox - 1, oy + v.barrelH * 0.75 + 13);
+        g.close();
+        g.fill();
+    }
+
+    if (flash01 > 0) {
+        drawFlashAt(g, def, ox + gunMuzzleX(def) + 2, oy, flash01);
+    }
+}
+
+function drawFlashAt(g: Graphics, def: WeaponDef, mx: number, my: number, t: number) {
+    const v = def.visual;
+    const r = v.flashSize * (0.55 + 0.45 * t);
+    g.fillColor = new Color(255, 210, 80, Math.floor(120 * t));
+    g.circle(mx, my, r * 1.35);
+    g.fill();
+    g.fillColor = new Color(255, 240, 160, Math.floor(230 * t));
+    g.moveTo(mx + r, my);
+    g.lineTo(mx + r * 0.25, my + r * 0.28);
+    g.lineTo(mx, my + r);
+    g.lineTo(mx - r * 0.25, my + r * 0.28);
+    g.lineTo(mx - r * 0.4, my);
+    g.lineTo(mx - r * 0.25, my - r * 0.28);
+    g.lineTo(mx, my - r);
+    g.lineTo(mx + r * 0.25, my - r * 0.28);
+    g.close();
+    g.fill();
+    g.fillColor = new Color(255, 255, 235, Math.floor(240 * t));
+    g.circle(mx, my, r * 0.32);
+    g.fill();
 }
 
 /** Muzzle star + (for ballistic guns) one brass shell at the eject port. */
