@@ -1,9 +1,8 @@
-# ET Mini Militia (ኢቲ ሚኒ ሚሊሻ)
+# ET Mini Militia
 
 An original 2D jetpack shooter for mobile, inspired by the feel of classic
 Mini Militia but built from scratch — original code, original procedural art,
-original text — with Ethiopian identity at its core. Built with **Cocos
-Creator 3.8**, the same engine family as the original game.
+original text. Built with **Cocos Creator 3.8**, the same engine family as the original game.
 
 > Legal note: this project contains **nothing** extracted from Appsomniacs'
 > Mini Militia. The `reference/` folder (git-ignored) is local-only study
@@ -12,13 +11,14 @@ Creator 3.8**, the same engine family as the original game.
 ## Features
 
 - Jetpack + dual-stick combat loop with custom AABB physics vs tile grids
-- Four weapons: Rifle, Shotgun, Sniper, Grenade Launcher (splash damage)
+- Weapons: Rifle, Shotgun, Sniper, Grenade Launcher, SMG, Magnum, Plasma Gun
+- Tactical throwable grenades, dual-wielding, and explosive steel barrels
+- Headshot criticals, killstreak announcements, and sniper laser sight
 - Weapon crates scattered on every map grant a random full-magazine weapon
 - Melee lunges, one-way platforms, drop-through floors, jetpack fuel economy
-- Bot AI: patrol / chase / attack / retreat states with line-of-sight checks
-- Four battlefields: ላሊበላ Lalibela, ስሜን Simien, መርካቶ Merkato, ዳናኪል Danakil
-- Full **English / አማርኛ** interface toggle, persisted between sessions
-- Modes: vs Bots, and Two Players on the same device (split touch zones)
+- Bot AI: patrol / chase / attack / retreat states with grenade/barrel awareness
+- Four battlefields: Lalibela, Simien, Merkato, Danakil
+- Modes: vs Bots, Two Players on the same device, and LAN multiplayer
 - Frag-limit and timed matches, respawns, results screen, rematch flow
 
 ## Quick start

@@ -59,7 +59,7 @@ game/
       player/         # jetpack controller, dual-stick touch input
       weapons/        # data-driven weapon defs + projectile pool
       ai/             # bot state machine (patrol/chase/shoot/retreat)
-      i18n/           # EN/አማርኛ string tables, font manager
+      i18n/           # English string tables, font manager
       net/            # LAN room host/join (WebSocket), same-device MP
       ui/             # HUD, menus, match results
     resources/
