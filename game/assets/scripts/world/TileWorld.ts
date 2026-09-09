@@ -39,6 +39,7 @@ export class TileWorld {
     pSpawns: Vec3[] = [];             // P1 candidate spawns
     qSpawns: Vec3[] = [];             // P2 candidate spawns
     botSpawns: Vec3[] = [];           // bot candidate spawns
+    barrelSpawns: Vec3[] = [];        // red explosive barrel spawns
     itemSpawns: { ch: string; cx: number; cy: number }[] = [];
 
     constructor(public def: MapDef) {
@@ -47,7 +48,7 @@ export class TileWorld {
 
     /**
      * Walks the ASCII rows once, filling the type grid and collecting
-     * gameplay markers ('P','Q','E' spawn points; 'B','I','M','W' pickups).
+     * gameplay markers ('P','Q','E' spawn points; 'B','I','M','W' pickups; 'X' barrels).
      * Rows are padded/truncated to the widest row so sloppy maps can't crash.
      */
     private parse() {
@@ -69,6 +70,7 @@ export class TileWorld {
                     case 'P': this.pSpawns.push(new Vec3(wx, wy, 0)); break;
                     case 'Q': this.qSpawns.push(new Vec3(wx, wy, 0)); break;
                     case 'E': this.botSpawns.push(new Vec3(wx, wy, 0)); break;
+                    case 'X': this.barrelSpawns.push(new Vec3(wx, wy, 0)); break;
                     case 'W':
                     case 'B': // buna speed pickup
                     case 'I': // injera heal pickup
@@ -96,17 +98,24 @@ export class TileWorld {
         return this.tileAt(Math.floor(x / T), Math.floor(y / T)) === TileType.SOLID;
     }
 
-    private overlapsSolid(a: Aabb): boolean {
-        const c0 = Math.floor(a.x / T), c1 = Math.floor((a.x + a.w - 0.01) / T);
-        const r0 = Math.floor(a.y / T), r1 = Math.floor((a.y + a.h - 0.01) / T);
-        for (let c = c0; c <= c1; c++)
-            for (let r = r0; r <= r1; r++)
+    private overlapsSolid(cx: number, cy: number, w: number, h: number): boolean {
+        const left = cx - w / 2;
+        const right = cx + w / 2 - 0.01;
+        const bottom = cy - h / 2;
+        const top = cy + h / 2 - 0.01;
+        const c0 = Math.floor(left / T), c1 = Math.floor(right / T);
+        const r0 = Math.floor(bottom / T), r1 = Math.floor(top / T);
+        for (let c = c0; c <= c1; c++) {
+            for (let r = r0; r <= r1; r++) {
                 if (this.tileAt(c, r) === TileType.SOLID) return true;
+            }
+        }
         return false;
     }
 
     /**
      * Moves a body by (dx, dy) resolving collisions axis by axis.
+     * (body.x, body.y) is the CENTER of the AABB with width w and height h.
      *
      * Returns [hitX, hitY, landed]:
      *   hitX/hitY — body was snapped flush against a solid tile on that axis
@@ -118,13 +127,16 @@ export class TileWorld {
      */
     moveBody(body: { x: number; y: number; w: number; h: number }, dx: number, dy: number, allowPlatformDrop: boolean): [boolean, boolean, boolean] {
         let hitX = false, hitY = false, landed = false;
+        const hw = body.w / 2;
+        const hh = body.h / 2;
 
         // --- X axis: snap flush to the blocking tile's edge ---
         if (dx !== 0) {
             body.x += dx;
-            if (this.overlapsSolid(body)) {
-                body.x = dx > 0 ? Math.floor((body.x + body.w) / T) * T - body.w - 0.01
-                                : Math.floor(body.x / T + 1) * T + 0.01;
+            if (this.overlapsSolid(body.x, body.y, body.w, body.h)) {
+                body.x = dx > 0
+                    ? Math.floor((body.x + hw) / T) * T - hw - 0.01
+                    : Math.floor((body.x - hw) / T + 1) * T + hw + 0.01;
                 hitX = true;
             }
         }
@@ -132,9 +144,10 @@ export class TileWorld {
         // --- Y axis: same snapping for ceilings and floors ---
         if (dy !== 0) {
             body.y += dy;
-            if (this.overlapsSolid(body)) {
-                body.y = dy > 0 ? Math.floor((body.y + body.h) / T) * T - body.h - 0.01
-                                : Math.floor(body.y / T + 1) * T + 0.01;
+            if (this.overlapsSolid(body.x, body.y, body.w, body.h)) {
+                body.y = dy > 0
+                    ? Math.floor((body.y + hh) / T) * T - hh - 0.01
+                    : Math.floor((body.y - hh) / T + 1) * T + hh + 0.01;
                 hitY = true;
                 if (dy < 0) landed = true;
             }
@@ -142,14 +155,16 @@ export class TileWorld {
 
         // One-way platforms: land only if feet crossed the platform top this frame
         if (!landed && dy < 0 && !allowPlatformDrop) {
-            const feetPrev = body.y - dy;
-            const c0 = Math.floor(body.x / T), c1 = Math.floor((body.x + body.w - 0.01) / T);
-            const rFoot = Math.floor(body.y / T);
+            const feetPrev = (body.y - dy) - hh;
+            const feetCurr = body.y - hh;
+            const c0 = Math.floor((body.x - hw) / T);
+            const c1 = Math.floor((body.x + hw - 0.01) / T);
+            const rFoot = Math.floor(feetCurr / T);
             const top = rFoot * T + T;
-            if (feetPrev >= top && body.y < top) {
+            if (feetPrev >= top && feetCurr < top) {
                 for (let c = c0; c <= c1; c++) {
                     if (this.tileAt(c, rFoot) === TileType.PLATFORM) {
-                        body.y = top + 0.01;
+                        body.y = top + hh + 0.01;
                         landed = true;
                         break;
                     }
@@ -160,8 +175,8 @@ export class TileWorld {
         // The world border is implicitly solid (tileAt returns SOLID off-grid),
         // so clamp horizontally — a single snap can only resolve one tile of
         // penetration, and this guarantees huge steps can never tunnel out.
-        if (body.x < 0.01) { body.x = 0.01; hitX = true; }
-        const maxX = this.cols * T - body.w - 0.01;
+        if (body.x < hw + 0.01) { body.x = hw + 0.01; hitX = true; }
+        const maxX = this.cols * T - hw - 0.01;
         if (body.x > maxX) { body.x = maxX; hitX = true; }
 
         return [hitX, hitY, landed];
@@ -235,7 +250,7 @@ export class TileWorld {
                 const tt = this.tileAt(c, r);
                 if (tt === TileType.EMPTY) continue;
                 const x = offsetX + c * T;
-                const y = offsetY + (this.rows - 1 - r) * T;
+                const y = offsetY + r * T;
                 if (tt === TileType.SOLID) {
                     g.fillColor = this.def.tileFill;
                     g.rect(x, y, T, T);
