@@ -40,3 +40,8 @@ Desktop.ini
 *.zip
 *.xapk
 *.apk
+
+# --- Gradle / Native build caches ---
+.gradle/
+**/build/
+
