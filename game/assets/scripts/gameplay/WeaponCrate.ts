@@ -13,6 +13,8 @@ import { pick } from '../core/Utils';
 import { CRATE_POOL, WeaponId, WEAPONS } from '../data/Weapons';
 import { ensureUT } from '../core/UIUtil';
 import { weaponAccent } from './GunArt';
+import { Effects } from '../world/Effects';
+import { t } from '../data/Strings';
 
 @ccclass('WeaponCrate')
 export class WeaponCrate extends Component {
@@ -23,6 +25,9 @@ export class WeaponCrate extends Component {
     loot: WeaponId = WeaponId.RIFLE;
 
     private g: Graphics = null!;
+    /** World VFX (set by MatchManager); null-safe. */
+    fx: Effects | null = null;
+    private age = 0;
 
     setup(x: number, y: number) {
         this.x = x; this.y = y;
@@ -41,12 +46,19 @@ export class WeaponCrate extends Component {
         this.loot = pick(CRATE_POOL);
     }
 
-    /** Ring + bullet pictogram tinted with the loot weapon's accent. */
+    /** Ring + beam + bullet pictogram tinted with the loot weapon's accent. */
     private draw() {
         const g = this.g;
         g.clear();
-        const bob = Math.sin(Date.now() / 300 + this.x) * 3;
+        // NOTE: bobbing happens via node position in tick(); this is drawn
+        // once per state change (loot roll / respawn), never per frame.
+        const bob = 0;
         const acc = weaponAccent(WEAPONS[this.loot]);
+
+        // loot beam — a soft light column advertising the weapon
+        g.fillColor = new Color(acc.r, acc.g, acc.b, 36);
+        g.rect(-7, 30 + bob, 14, 96);
+        g.fill();
 
         g.lineWidth = 3.5;
         g.strokeColor = acc;
@@ -76,17 +88,34 @@ export class WeaponCrate extends Component {
         this.taken = true;
         this.respawnT = CFG.CRATE_RESPAWN;
         this.node.active = false;
+        // juice: weapon-colored ring + spark pop
+        const acc = weaponAccent(WEAPONS[this.loot]);
+        this.fx?.ring({ x: this.x, y: this.y + 26, r0: 22, r1: 52, life: 0.3, color: acc, width: 5 });
+        this.fx?.burst({ x: this.x, y: this.y + 26, count: 9, speed: 280, size: 4, color: acc, life: 0.4 });
+        this.fx?.floatText(this.x, this.y + 66, t(this.lootNameKey()), acc, 26);
         return true;
     }
 
     tick(dt: number) {
-        if (!this.taken) { this.draw(); return; }
+        if (!this.taken) {
+            this.age += dt;
+            // bob + a slow pulse on the loot beam scale via node y only
+            this.node.setPosition(this.x,
+                this.y + Math.sin(this.age * 4 + this.x * 0.05) * 3, 0);
+            return;
+        }
         this.respawnT -= dt;
         if (this.respawnT <= 0) {
             this.taken = false;
             this.rollLoot();
             this.node.active = true;
             this.draw();
+            this.fx?.ring({
+                x: this.x, y: this.y + 26, r0: 6, r1: 36,
+                life: 0.32, color: weaponAccent(WEAPONS[this.loot]), width: 4,
+            });
         }
     }
+
+    private lootNameKey(): string { return WEAPONS[this.loot].nameKey; }
 }

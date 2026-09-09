@@ -12,6 +12,7 @@ const { ccclass } = _decorator;
 import { CFG } from '../core/GameConfig';
 import { Fighter } from './Fighter';
 import { ensureUT } from '../core/UIUtil';
+import { Effects } from '../world/Effects';
 
 export type ItemKind = 'buna' | 'injera' | 'mesob';
 
@@ -25,6 +26,9 @@ export class PickupItem extends Component {
     private g: Graphics = null!;
     private iconLbl: Label = null!;
     private iconNode: Node = null!;
+    /** World VFX (set by MatchManager); null-safe. */
+    fx: Effects | null = null;
+    private age = 0;
 
     setup(kind: ItemKind, x: number, y: number) {
         this.kind = kind;
@@ -56,7 +60,9 @@ export class PickupItem extends Component {
     private draw() {
         const g = this.g;
         g.clear();
-        const bob = Math.sin(Date.now() / 300 + this.x) * 3;
+        // NOTE: the bob is applied to the node position in tick() — this
+        // Graphics is drawn once per state change, never per frame.
+        const bob = 0;
         const col = this.color();
 
         // ring + glow pad
@@ -117,12 +123,18 @@ export class PickupItem extends Component {
         this.taken = true;
         this.respawnT = CFG.ITEM_RESPAWN;
         this.node.active = false;
+        // juice: ring burst + sparks in the pickup's color
+        this.fx?.ring({ x: this.x, y: this.y + 26, r0: 22, r1: 46, life: 0.28, color: this.color(), width: 4 });
+        this.fx?.burst({ x: this.x, y: this.y + 26, count: 7, speed: 230, size: 3.5, color: this.color(), life: 0.35 });
         return true;
     }
 
     tick(dt: number) {
         if (!this.taken) {
-            this.draw();
+            this.age += dt;
+            // gentle bob via node position — no Graphics redraw needed
+            this.node.setPosition(this.x,
+                this.y + Math.sin(this.age * 5 + this.x * 0.05) * 3, 0);
             return;
         }
         this.respawnT -= dt;
@@ -130,6 +142,10 @@ export class PickupItem extends Component {
             this.taken = false;
             this.node.active = true;
             this.draw();
+            this.fx?.ring({
+                x: this.x, y: this.y + 26, r0: 6, r1: 32,
+                life: 0.3, color: this.color(), width: 4,
+            });
         }
     }
 }
