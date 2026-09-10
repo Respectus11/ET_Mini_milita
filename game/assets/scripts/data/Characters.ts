@@ -23,10 +23,12 @@ export interface CharacterDef {
 }
 
 export const CHARACTERS: CharacterDef[] = [
-    { id: 'abebe', nameKey: 'char_abebe', body: new Color(46, 125, 50),  accent: new Color(255, 193, 7),  skin: new Color(120, 72, 44) },
+    { id: 'abebe', nameKey: 'char_abebe', body: new Color(46, 125, 50),  accent: new Color(255, 193, 7),   skin: new Color(120, 72, 44) },
     { id: 'almaz', nameKey: 'char_almaz', body: new Color(198, 40, 40),  accent: new Color(255, 224, 178), skin: new Color(139, 90, 43) },
-    { id: 'desta', nameKey: 'char_desta', body: new Color(21, 101, 192), accent: new Color(255, 213, 79), skin: new Color(110, 66, 40) },
+    { id: 'desta', nameKey: 'char_desta', body: new Color(21, 101, 192), accent: new Color(255, 213, 79),  skin: new Color(110, 66, 40) },
     { id: 'hanna', nameKey: 'char_hanna', body: new Color(142, 36, 170), accent: new Color(255, 205, 210), skin: new Color(129, 82, 51) },
+    { id: 'kebede', nameKey: 'char_kebede', body: new Color(55, 71, 79), accent: new Color(255, 112, 67),  skin: new Color(115, 68, 42) },
+    { id: 'mekdes', nameKey: 'char_mekdes', body: new Color(0, 137, 123), accent: new Color(255, 238, 88), skin: new Color(132, 85, 48) },
 ];
 
 /**
