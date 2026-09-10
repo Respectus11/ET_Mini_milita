@@ -60,6 +60,7 @@ declare module 'cc' {
         destroy(): void;
         setPosition(x: number, y: number, z?: number): void;
         setScale(x: number, y: number, z?: number): void;
+        setRotationFromEuler(x: number, y: number, z: number): void;
         getComponent<T>(type: { new (): T }): T | null;
         getComponentsInChildren<T>(type: { new (): T }): T[];
         getComponentInChildren<T>(type: { new (): T }): T | null;
@@ -81,6 +82,10 @@ declare module 'cc' {
         fillColor: Color;
         strokeColor: Color;
         lineWidth: number;
+        lineJoin: number;
+        lineCap: number;
+        static LineJoin: { BEVEL: number; ROUND: number; MITER: number };
+        static LineCap: { BUTT: number; ROUND: number; SQUARE: number };
         clear(): void;
         rect(x: number, y: number, w: number, h: number): void;
         roundRect(x: number, y: number, w: number, h: number, r: number): void;
