@@ -478,6 +478,28 @@ class SoundEngine {
         osc.stop(time + duration);
     }
 
+    private wallSlideT = 0;
+    /** Short scraping sound when a fighter slides down a wall. Throttled to 200ms. */
+    playWallSlide() {
+        const now = performance.now() / 1000;
+        if (now - this.wallSlideT < 0.2) return;
+        this.wallSlideT = now;
+        if (!this.canPlay()) return;
+        const ctx = this.ctx;
+        const t = ctx.currentTime;
+        this.tone(180, 70, t, 0.18, 0.12, 'sawtooth');
+        this.noiseBurst(t, 0.15, 0.18, 900);
+    }
+
+    /** Continuous hiss+crackle for flamethrower firing. */
+    playFlame() {
+        if (!this.canPlay()) return;
+        const ctx = this.ctx;
+        const t = ctx.currentTime;
+        this.noiseBurst(t, 0.12, 0.6, 1400);
+        this.tone(90, 60, t, 0.12, 0.25, 'sawtooth');
+    }
+
     private noiseBurst(time: number, duration: number, volume: number, cutoffHz = 2000) {
         const ctx = this.ctx;
         const bufferSize = Math.floor(ctx.sampleRate * duration);
