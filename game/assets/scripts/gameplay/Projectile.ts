@@ -43,6 +43,8 @@ interface PState {
     dmg: number;
     splash: number;
     life: number;
+    maxLife: number;
+    isFlame: boolean;
     ownerId: number;
     color: Color;
     trail: { x: number; y: number }[];
@@ -58,7 +60,8 @@ export class ProjectileSystem {
     constructor(public host: ProjectileHost, private root: Node) {}
 
     spawn(ownerId: number, x: number, y: number, angle: number, speed: number,
-          def: { dmg: number; gravityScale: number; splashRadius: number }, color: Color) {
+          def: { dmg: number; gravityScale: number; splashRadius: number }, color: Color,
+          isFlame = false) {
         const s = this.free.pop() ?? this.make();
         s.x = x; s.y = y;
         s.vx = Math.cos(angle) * speed;
@@ -66,7 +69,9 @@ export class ProjectileSystem {
         s.grav = def.gravityScale * CFG.GRAVITY * 0.75;
         s.dmg = def.dmg;
         s.splash = def.splashRadius;
-        s.life = 2.2;
+        s.isFlame = isFlame;
+        s.life = isFlame ? 0.32 : 2.2;
+        s.maxLife = s.life;
         s.ownerId = ownerId;
         s.color = color;
         s.trail.length = 0;
@@ -81,7 +86,7 @@ export class ProjectileSystem {
         return {
             node, g: node.addComponent(Graphics),
             x: 0, y: 0, vx: 0, vy: 0, grav: 0,
-            dmg: 10, splash: 0, life: 2, ownerId: 0,
+            dmg: 10, splash: 0, life: 2, maxLife: 2, isFlame: false, ownerId: 0,
             color: new Color(255, 255, 0), trail: [], tmp: new Color(),
         };
     }
@@ -101,8 +106,13 @@ export class ProjectileSystem {
                 p.y += p.vy * dt / steps;
 
                 if (this.host.world.solidAtWorld(p.x, p.y)) {
-                    this.impact(p, prevX, prevY);
-                    dead = true;
+                    if (p.isFlame) {
+                        // flames don't bounce — just expire on wall contact
+                        this.retire(i); dead = true;
+                    } else {
+                        this.impact(p, prevX, prevY);
+                        dead = true;
+                    }
                     break;
                 }
                 // hit barrels
@@ -132,34 +142,56 @@ export class ProjectileSystem {
             }
 
             if (!dead) {
-                p.trail.push({ x: p.x, y: p.y });
-                if (p.trail.length > 7) p.trail.shift();
                 const g = p.g;
                 g.clear();
                 p.tmp.r = p.color.r; p.tmp.g = p.color.g; p.tmp.b = p.color.b;
-                // soft glow halo
-                p.tmp.a = 60;
-                g.fillColor = p.tmp;
-                g.circle(p.x, p.y, p.splash > 0 ? 15 : 10);
-                g.fill();
-                // fading trail — alpha and width grow toward the head
-                if (p.trail.length > 1) {
-                    for (let t = 1; t < p.trail.length; t++) {
-                        const f = t / (p.trail.length - 1);
-                        p.tmp.a = Math.round(120 * f);
-                        g.strokeColor = p.tmp;
-                        g.lineWidth = 1 + 2.5 * f;
-                        g.moveTo(p.trail[t - 1].x, p.trail[t - 1].y);
-                        g.lineTo(p.trail[t].x, p.trail[t].y);
-                        g.stroke();
+
+                if (p.isFlame) {
+                    // Expanding flame blob — grows from r=6 to r=22 as it ages
+                    const age = 1 - p.life / p.maxLife;
+                    const r = 6 + age * 16;
+                    // Outer haze
+                    p.tmp.a = Math.round(90 * (1 - age));
+                    g.fillColor = p.tmp;
+                    g.circle(p.x, p.y, r * 1.6);
+                    g.fill();
+                    // Core flame
+                    p.tmp.a = Math.round(200 * (1 - age * 0.7));
+                    g.fillColor = p.tmp;
+                    g.circle(p.x, p.y, r);
+                    g.fill();
+                    // Bright hot center
+                    g.fillColor = new Color(255, 245, 180, Math.round(180 * (1 - age)));
+                    g.circle(p.x, p.y, r * 0.4);
+                    g.fill();
+                } else {
+                    // soft glow halo
+                    p.tmp.a = 60;
+                    g.fillColor = p.tmp;
+                    g.circle(p.x, p.y, p.splash > 0 ? 15 : 10);
+                    g.fill();
+                    // fading trail — alpha and width grow toward the head
+                    if (p.trail.length > 1) {
+                        for (let t = 1; t < p.trail.length; t++) {
+                            const f = t / (p.trail.length - 1);
+                            p.tmp.a = Math.round(120 * f);
+                            g.strokeColor = p.tmp;
+                            g.lineWidth = 1 + 2.5 * f;
+                            g.moveTo(p.trail[t - 1].x, p.trail[t - 1].y);
+                            g.lineTo(p.trail[t].x, p.trail[t].y);
+                            g.stroke();
+                        }
                     }
+                    // bright core
+                    p.tmp.a = 240;
+                    g.fillColor = p.tmp;
+                    g.circle(p.x, p.y, p.splash > 0 ? 9 : 4.5);
+                    g.fill();
                 }
-                // bright core
-                p.tmp.a = 240;
-                g.fillColor = p.tmp;
-                g.circle(p.x, p.y, p.splash > 0 ? 9 : 4.5);
-                g.fill();
-                p.node.setPosition(0, 0, 0); // graphics drawn in world coords under root
+
+                p.trail.push({ x: p.x, y: p.y });
+                if (p.trail.length > 7) p.trail.shift();
+                p.node.setPosition(0, 0, 0);
             }
         }
     }
