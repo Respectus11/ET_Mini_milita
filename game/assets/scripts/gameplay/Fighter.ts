@@ -11,14 +11,14 @@
  * moveIn/aimIn each frame; tick() turns that intent into physics. This keeps
  * every input source interchangeable.
  */
-import { _decorator, Color, Component, Graphics, Node } from 'cc';
+import { _decorator, Color, Component, Graphics, Label, Node } from 'cc';
 const { ccclass } = _decorator;
 import { CFG } from '../core/GameConfig';
 import { clamp } from '../core/Utils';
 import { ensureUT } from '../core/UIUtil';
 import { CharacterDef } from '../data/Characters';
 import { WeaponDef, WEAPONS, WeaponId } from '../data/Weapons';
-import { drawGun, drawDualGuns, weaponByIndex } from './GunArt';
+import { drawGun, drawDualGuns, weaponByIndex, gunMuzzleX } from './GunArt';
 import { drawFighterRig } from '../core/FighterArt';
 import { TileWorld } from '../world/TileWorld';
 import { Effects } from '../world/Effects';
@@ -55,10 +55,18 @@ export class Fighter extends Component {
     grounded = false;
     faceDir = 1;
 
+    // wall mechanics (Mini Militia style)
+    wallDir = 0;          // -1=left wall, 0=none, 1=right wall
+    wallSliding = false;
+    private wallJumpLock = 0; // brief cooldown after wall-jump
+
     // combat state
     hp = CFG.MAX_HP;
     alive = true;
     invuln = 0;
+
+    // HP regen (Mini Militia: slow regen after 4s out of combat)
+    private regenDelay = 0;
 
     // jetpack
     fuel = CFG.JETPACK_MAX_FUEL;
@@ -101,14 +109,24 @@ export class Fighter extends Component {
     world!: TileWorld;
     onShoot: ((f: Fighter) => void) | null = null;
     onMelee: ((f: Fighter) => void) | null = null;
+    onDropWeapon: ((f: Fighter, w: WeaponDef, x: number, y: number) => void) | null = null;
+    respawnTimer = 0;
+
+    get isRegenerating(): boolean {
+        return this.alive && this.hp < CFG.MAX_HP && this.regenDelay <= 0;
+    }
 
     private g: Graphics | null = null;
     private bodyG: Graphics = null!;
     private gunNode: Node = null!;
     private gunG: Graphics = null!;
+    private laserNode: Node = null!;
+    private laserG: Graphics = null!;
     private muzzleT = 0;              // counts down the flash/kick window
     private static FLASH_T = 0.07;
     private gunBaseX = 0;
+    private walkPhase = 0;
+    private wasFlying = false;
     /** Last rendered overlay state (invuln blink phase / shield presence). */
     private lastBlink = -1;
     private lastShieldOn = false;
@@ -125,6 +143,8 @@ export class Fighter extends Component {
     private jetNode: Node = null!;
     private jetG: Graphics = null!;
     private jetWasOn = false;
+    private smokeT = 0;           // jetpack smoke trail throttle
+    private nameLbl: Label | null = null;
 
     init(char: CharacterDef, world: TileWorld) {
         this.char = char;
@@ -139,7 +159,7 @@ export class Fighter extends Component {
         this.node.addChild(this.jetNode);
         ensureUT(this.jetNode);
         this.jetG = this.jetNode.addComponent(Graphics);
-        this.jetNode.setPosition(-this.w * 0.12, -this.h * 0.02, 0);
+        this.jetNode.setPosition(0, 0, 0);
 
         // dedicated layer so gun redraws never touch body vector ops
         ensureUT(this.node);
@@ -147,16 +167,36 @@ export class Fighter extends Component {
         this.node.addChild(this.gunNode);
         ensureUT(this.gunNode);
         this.gunG = this.gunNode.addComponent(Graphics);
-        this.gunBaseX = this.w * 0.06;
-        this.gunNode.setPosition(this.gunBaseX, -this.h * 0.02, 0);
+        this.gunBaseX = this.w * 0.12;
+        this.gunNode.setPosition(this.gunBaseX, -this.h * 0.04, 0);
+
+        // dedicated laser sight layer attached to gun (rotates along with aim)
+        this.laserNode = new Node('laser');
+        this.gunNode.addChild(this.laserNode);
+        ensureUT(this.laserNode);
+        this.laserG = this.laserNode.addComponent(Graphics);
+
         this.drawGunLayer(0);
+
+        // floating name label above fighter
+        const nameNode = new Node('name');
+        this.node.addChild(nameNode);
+        ensureUT(nameNode);
+        this.nameLbl = nameNode.addComponent(Label);
+        this.nameLbl.string = this.teamLabel;
+        this.nameLbl.fontSize = 20;
+        this.nameLbl.lineHeight = 22;
+        this.nameLbl.isBold = true;
+        this.nameLbl.enableOutline = true;
+        this.nameLbl.outlineColor = new Color(0, 0, 0, 200);
+        this.nameLbl.outlineWidth = 3;
+        this.nameLbl.color = this.char.body;
+        nameNode.setPosition(0, this.h * 0.58 + 8, 0);
     }
 
     private drawSelf() {
-        // Rig drawing lives in core/FighterArt so the menu's outfit editor
-        // preview renders the exact same look (the held weapon stays on its
-        // own GunArt layer drawn by init()).
-        drawFighterRig(this.bodyG, this.char, this.w, this.h, this.faceDir);
+        const isFlying = !this.grounded && (this.moveIn.jet || Math.abs(this.vy) > 80);
+        drawFighterRig(this.bodyG, this.char, this.w, this.h, this.faceDir, isFlying, this.walkPhase);
 
         const g = this.bodyG;
         if (this.shieldHp > 0) {
@@ -204,7 +244,11 @@ export class Fighter extends Component {
         this.fuel = CFG.JETPACK_MAX_FUEL;
         this.speedT = 0; this.shieldHp = 0; this.shieldT = 0;
         this.invuln = CFG.INVULN_AFTER_SPAWN;
+        this.regenDelay = 0;
+        this.wallDir = 0; this.wallSliding = false;
+        this.respawnTimer = 0;
         this.node.active = true;
+        if (this.nameLbl) { this.nameLbl.string = this.teamLabel; this.nameLbl.node.active = true; }
         this.syncNode();
         this.drawSelf();
         bus.emit(Evt.HP_CHANGED, this.id, this.hp, this.teamLabel);
@@ -214,24 +258,53 @@ export class Fighter extends Component {
         if (!this.alive) return;
         this.alive = false;
         this.node.active = false;
-        // Gibs / equipment scattering on death
+        if (this.nameLbl) this.nameLbl.node.active = false;
+        if (this.laserG) this.laserG.clear();
+        if (this.jetG) this.jetG.clear();
+        if (this.onDropWeapon && this.weapon) {
+            this.onDropWeapon(this, this.weapon, this.x, this.y);
+            if (this.weapon2) {
+                this.onDropWeapon(this, this.weapon2, this.x + 12, this.y + 8);
+            }
+        }
         if (this.fx) {
+            // body uniform + scarf equipment scatter
             this.fx.burst({
                 x: this.x, y: this.y,
-                count: isExplosion ? 24 : 14,
-                speed: isExplosion ? 480 : 300,
-                size: 4,
-                life: 0.55,
+                count: isExplosion ? 28 : 16,
+                speed: isExplosion ? 520 : 320,
+                size: 4.5, life: 0.65,
                 color: this.char.body,
             });
             this.fx.burst({
                 x: this.x, y: this.y + this.h * 0.3,
-                count: 8,
-                speed: 350,
-                size: 5,
-                life: 0.65,
+                count: 10, speed: 360, size: 5.5, life: 0.7,
                 color: this.char.accent,
             });
+            // blood splatter — red sparks in downward cone
+            this.fx.burst({
+                x: this.x, y: this.y + this.h * 0.25,
+                count: 14, speed: 280, size: 3,
+                angle: -Math.PI / 2, spread: Math.PI * 0.8,
+                color: new Color(200, 30, 30, 255),
+                life: 0.5, grav: 900,
+            });
+            // helmet debris — dark olive chunks
+            this.fx.burst({
+                x: this.x, y: this.y + this.h * 0.38,
+                count: 5, speed: 420, size: 6.5, life: 0.55,
+                color: new Color(86, 122, 64, 255),
+                shape: 'debris', grav: 800,
+            });
+            // ammo pouch / equipment scatter (dark rectangles)
+            this.fx.burst({
+                x: this.x, y: this.y, count: 6, speed: 200,
+                size: 4, life: 0.6, shape: 'debris',
+                color: new Color(38, 40, 34, 255), grav: 700,
+            });
+            // smoke puff at death site
+            this.fx.puff(this.x, this.y + this.h * 0.15, 3,
+                new Color(80, 80, 80, 180), 50);
         }
         bus.emit(Evt.FRAG, killerId, this.id);
     }
@@ -256,6 +329,8 @@ export class Fighter extends Component {
         if (dmg <= 0) return true;
         this.hp -= dmg;
         this.flashT = Fighter.FLASH_HIT;
+        // Reset HP regen timer on every hit
+        this.regenDelay = CFG.HP_REGEN_DELAY;
         this.drawSelf();
         if (isCrit) {
             Sfx.playHeadshot();
@@ -264,9 +339,16 @@ export class Fighter extends Component {
                 count: 14, speed: 280, size: 3.5, life: 0.4,
                 color: new Color(255, 215, 0, 255),
             });
-            this.fx?.floatText(this.x, this.y + this.h * 0.6, 'HEADSHOT!', Theme.goldHi, 36);
+            this.fx?.floatText(this.x, this.y + this.h * 0.6,
+                `💀 ${dmg}`, new Color(255, 60, 60, 255), 38);
         } else {
             Sfx.playHit();
+            // floating damage number
+            const dmgCol = isExplosive
+                ? new Color(255, 140, 30, 255)
+                : new Color(255, 230, 60, 255);
+            this.fx?.floatText(this.x + (Math.random() - 0.5) * 20,
+                this.y + this.h * 0.5, `-${dmg}`, dmgCol, 30);
         }
         bus.emit(Evt.HP_CHANGED, this.id, Math.max(0, this.hp), this.teamLabel);
         if (this.hp <= 0) {
@@ -319,8 +401,8 @@ export class Fighter extends Component {
         } else {
             drawGun(this.gunG, this.weapon, flash01);
         }
-        const kick = Math.max(flash01, flash02) * 6;
-        this.gunNode.setPosition(this.gunBaseX - kick, -this.h * 0.02, 0);
+        const kick = Math.max(flash01, flash02) * 7;
+        this.gunNode.setPosition(this.gunBaseX - kick, -this.h * 0.04, 0);
     }
 
     startReload() {
@@ -412,16 +494,22 @@ export class Fighter extends Component {
         return true;
     }
 
-    tryMelee(target: Fighter) {
+    tryMelee(target?: Fighter | null) {
         if (!this.alive || this.meleeCd > 0) return;
-        const dx = target.x - this.x;
-        const dy = target.y - this.y;
-        if (Math.sign(dx) === this.faceDir || Math.abs(dx) < 20) {
-            if (Math.hypot(dx, dy) < CFG.MELEE_RANGE + target.w) {
-                this.meleeCd = CFG.MELEE_CD;
-                Sfx.playMelee();
-                if (this.onMelee) this.onMelee(this);
+        if (target) {
+            const dx = target.x - this.x;
+            const dy = target.y - this.y;
+            if (Math.sign(dx) === this.faceDir || Math.abs(dx) < 20) {
+                if (Math.hypot(dx, dy) < CFG.MELEE_RANGE + target.w) {
+                    this.meleeCd = CFG.MELEE_CD;
+                    Sfx.playMelee();
+                    if (this.onMelee) this.onMelee(this);
+                }
             }
+        } else {
+            this.meleeCd = CFG.MELEE_CD;
+            Sfx.playMelee();
+            if (this.onMelee) this.onMelee(this);
         }
     }
 
@@ -430,16 +518,54 @@ export class Fighter extends Component {
         this.tickTimers(dt);
 
         if (this.alive) {
+            this.updateAim();
             const speedMult = this.speedT > 0 ? CFG.BUNA_SPEED_MULT : 1;
             const targetVx = this.moveIn.mx * CFG.MOVE_SPEED * speedMult;
             const accel = this.grounded ? 12 : 7;
             this.vx += (targetVx - this.vx) * Math.min(1, accel * dt);
 
+            // --- wall-slide detection (before jetpack so wall-jump can override) ---
+            this.wallDir = 0;
+            this.wallSliding = false;
+            if (!this.grounded && this.wallJumpLock <= 0) {
+                const leftX  = this.x - this.w / 2 - 4;
+                const rightX = this.x + this.w / 2 + 4;
+                if (this.world.solidAtWorld(rightX, this.y) && this.moveIn.mx > 0.1) {
+                    this.wallDir = 1;
+                } else if (this.world.solidAtWorld(leftX, this.y) && this.moveIn.mx < -0.1) {
+                    this.wallDir = -1;
+                }
+                if (this.wallDir !== 0 && this.vy < 0 && !this.moveIn.jet) {
+                    this.wallSliding = true;
+                    // clamp downward speed to wall-slide maximum
+                    if (this.vy < CFG.WALL_SLIDE_VY) this.vy = CFG.WALL_SLIDE_VY;
+                    // kick-off dust on the wall side
+                    if (this.fx && Math.random() < 0.15) {
+                        this.fx.dust(this.x + this.wallDir * (this.w / 2 + 2),
+                            this.y, -this.wallDir);
+                    }
+                    Sfx.playWallSlide();
+                }
+            }
+
             if (this.moveIn.jet && this.fuel > 0) {
-                this.vy += CFG.JETPACK_THRUST * dt;
-                this.fuel -= CFG.JETPACK_DRAIN * dt;
-                this.fuelDelay = CFG.JETPACK_REGEN_DELAY;
-                if (this.fuel < 0) this.fuel = 0;
+                // wall-jump: press jet while wall-sliding = push off
+                if (this.wallSliding && this.wallDir !== 0) {
+                    this.vx = -this.wallDir * CFG.WALL_JUMP_VX;
+                    this.vy  = CFG.WALL_JUMP_VY;
+                    this.fuel = Math.max(0, this.fuel - CFG.WALL_JUMP_FUEL_COST);
+                    this.fuelDelay = CFG.JETPACK_REGEN_DELAY;
+                    this.wallJumpLock = 0.22; // brief grace so we don't re-stick
+                    this.wallDir = 0; this.wallSliding = false;
+                    this.squash = 1.15; // stretch on wall-jump
+                    this.fx?.burst({ x: this.x, y: this.y, count: 6, speed: 200,
+                        size: 3, life: 0.25, color: new Color(100, 200, 255, 255) });
+                } else {
+                    this.vy += CFG.JETPACK_THRUST * dt;
+                    this.fuel -= CFG.JETPACK_DRAIN * dt;
+                    this.fuelDelay = CFG.JETPACK_REGEN_DELAY;
+                    if (this.fuel < 0) this.fuel = 0;
+                }
             } else {
                 if (this.fuelDelay > 0) this.fuelDelay -= dt;
                 else {
@@ -448,15 +574,19 @@ export class Fighter extends Component {
                 }
                 this.vy -= CFG.GRAVITY * dt;
             }
+            if (this.wallJumpLock > 0) this.wallJumpLock -= dt;
             this.vy = clamp(this.vy, -1900, 900);
 
             const wasGrounded = this.grounded;
             const fallVy = this.vy;
-            const [, , landed] = this.world.moveBody(
+            const [hitX, , landed] = this.world.moveBody(
                 this as any, this.vx * dt, this.vy * dt, this.moveIn.dropDown);
+            // stop horizontal velocity when pushing into a solid wall
+            if (hitX && !this.wallSliding) this.vx = 0;
             if (landed) {
                 this.vy = 0;
                 this.grounded = true;
+                this.wallSliding = false;
                 if (!wasGrounded) {
                     // landing squash + dust puff (bigger for hard falls)
                     this.squash = fallVy < -700 ? 0.72 : 0.84;
@@ -467,61 +597,150 @@ export class Fighter extends Component {
                     }
                 }
             } else this.grounded = false;
-            if (this.moveIn.mx !== 0) this.faceDir = this.moveIn.mx > 0 ? 1 : -1;
 
-            // Dual rocket boots exhaust flame + occasional soot
+            // Orientation: aiming takes precedence over locomotion facing
+            if (this.aimIn.aiming && Math.abs(this.aimIn.ax) > 0.15) {
+                const newDir = this.aimIn.ax > 0 ? 1 : -1;
+                if (newDir !== this.faceDir) {
+                    this.faceDir = newDir;
+                    this.drawSelf();
+                }
+            } else if (this.moveIn.mx !== 0) {
+                const newDir = this.moveIn.mx > 0 ? 1 : -1;
+                if (newDir !== this.faceDir) {
+                    this.faceDir = newDir;
+                    this.drawSelf();
+                }
+            }
+
+            // Flying posture transition
+            const isFlying = !this.grounded && (this.moveIn.jet || Math.abs(this.vy) > 80);
+            if (isFlying !== this.wasFlying) {
+                this.wasFlying = isFlying;
+                this.drawSelf();
+            }
+
+            // Dual rocket boots exhaust flame + thick smoke contrail
             if (this.moveIn.jet && this.fuel > 0) {
                 this.drawJetFlame();
                 this.squash = Math.max(this.squash, 1.05);
                 Sfx.playJetpack();
-                if (this.fx && Math.random() < 0.12) {
-                    this.fx.puff(this.x - this.faceDir * this.w * 0.15,
-                        this.y - this.h * 0.45, 1,
-                        new Color(95, 95, 100, 255), 25);
+                // smoke puff on interval — gives thick trail feel
+                this.smokeT -= dt;
+                if (this.smokeT <= 0 && this.fx) {
+                    this.smokeT = 0.055;
+                    // smoke cloud from each boot nozzle
+                    const bx1 = this.x - this.faceDir * this.w * 0.24;
+                    const bx2 = this.x + this.faceDir * this.w * 0.10;
+                    const by  = this.y - this.h * 0.45;
+                    this.fx.puff(bx1, by, 1, new Color(90, 90, 95, 255), 28);
+                    this.fx.puff(bx2, by, 1, new Color(90, 90, 95, 255), 28);
+                    // ember sparks
+                    this.fx.burst({ x: this.x, y: by - 4,
+                        count: 2, speed: 160, size: 2,
+                        angle: -Math.PI / 2, spread: 0.9,
+                        color: new Color(255, 160, 40, 255), life: 0.18 });
                 }
             } else if (this.jetWasOn) {
                 this.jetG.clear();
                 this.jetWasOn = false;
+                this.smokeT = 0;
             }
-            // running dust while grounded
-            if (this.grounded && Math.abs(this.vx) > 140) {
-                this.dustT -= dt;
-                if (this.dustT <= 0) {
-                    this.dustT = 0.16;
-                    this.fx?.dust(this.x, this.y - this.h / 2,
-                        -Math.sign(this.vx));
+
+            // Running footstep dust & leg bobbing while grounded
+            if (this.grounded && Math.abs(this.vx) > 30) {
+                this.walkPhase += dt * (Math.abs(this.vx) / 18);
+                if (Math.abs(this.vx) > 140) {
+                    this.dustT -= dt;
+                    if (this.dustT <= 0) {
+                        this.dustT = 0.16;
+                        this.fx?.dust(this.x, this.y - this.h / 2, -Math.sign(this.vx));
+                    }
                 }
+                this.drawSelf();
             }
         }
 
         this.syncNode();
     }
 
-    /** Dual rocket boot exhaust flames. */
+    /** Dual rocket boot exhaust flames with layered plasma core. */
     private drawJetFlame() {
         if (!this.jetG) return;
         this.jetWasOn = true;
         const g = this.jetG;
         g.clear();
 
-        const len = this.h * (0.34 + Math.random() * 0.18);
-        const bootOffsets = [-this.w * 0.22, this.w * 0.08];
+        const len = this.h * (0.42 + Math.random() * 0.24);
+        const bootOffsets = [-this.w * 0.24, this.w * 0.10];
+        const bootY = -this.h * 0.46;
+
         for (const bx of bootOffsets) {
-            // Outer bright orange flame
-            g.fillColor = new Color(255, 140, 20, 210);
-            g.moveTo(bx - 3.5, -this.h * 0.42);
-            g.lineTo(bx + 3.5, -this.h * 0.42);
-            g.lineTo(bx, -this.h * 0.42 - len);
+            // 1. Outer blazing orange rocket thrust plume
+            g.fillColor = new Color(255, 120, 20, 230);
+            g.moveTo(bx - 4.5, bootY);
+            g.lineTo(bx + 4.5, bootY);
+            g.lineTo(bx, bootY - len);
             g.close();
             g.fill();
 
-            // Inner white-yellow plasma core
-            g.fillColor = new Color(255, 240, 180, 245);
-            g.moveTo(bx - 1.8, -this.h * 0.42);
-            g.lineTo(bx + 1.8, -this.h * 0.42);
-            g.lineTo(bx, -this.h * 0.42 - len * 0.6);
+            // 2. Inner electric white-yellow core
+            g.fillColor = new Color(255, 250, 190, 255);
+            g.moveTo(bx - 2.2, bootY);
+            g.lineTo(bx + 2.2, bootY);
+            g.lineTo(bx, bootY - len * 0.65);
             g.close();
             g.fill();
+
+            // 3. Electric blue nozzle flash
+            g.fillColor = new Color(100, 220, 255, 240);
+            g.fillRect(bx - 3.5, bootY, 7, 2);
+        }
+    }
+
+    /** Updates 360-degree weapon aiming rotation and laser sight guide. */
+    updateAim() {
+        if (!this.gunNode) return;
+
+        let aimX = this.aimIn.ax;
+        let aimY = this.aimIn.ay;
+        const isAiming = this.aimIn.aiming && (Math.hypot(aimX, aimY) > 0.15);
+
+        if (!isAiming) {
+            aimX = this.faceDir;
+            aimY = 0;
+        }
+
+        // Local angle relative to facing direction
+        const localAx = this.faceDir * aimX;
+        const localAy = aimY;
+        const localAngRad = Math.atan2(localAy, localAx);
+        const localAngDeg = localAngRad * 180 / Math.PI;
+
+        this.gunNode.setRotationFromEuler(0, 0, localAngDeg);
+
+        // Update Laser Sight
+        if (!this.laserG) return;
+        this.laserG.clear();
+        if (isAiming && this.alive && !this.netGhost) {
+            const startX = gunMuzzleX(this.weapon) + 2;
+            const maxLaserLen = this.weapon.id === WeaponId.SNIPER ? 750 : 380;
+
+            const laserCol = this.weapon.id === WeaponId.SNIPER 
+                ? new Color(0, 255, 100, 190)
+                : this.weapon.id === WeaponId.PLASMA
+                ? new Color(0, 230, 255, 190)
+                : new Color(255, 50, 50, 160);
+
+            this.laserG.lineWidth = this.weapon.id === WeaponId.SNIPER ? 2 : 1.5;
+            this.laserG.strokeColor = laserCol;
+            this.laserG.moveTo(startX, 0);
+            this.laserG.lineTo(startX + maxLaserLen, 0);
+            this.laserG.stroke();
+
+            this.laserG.fillColor = laserCol;
+            this.laserG.circle(startX + maxLaserLen, 0, 3.5);
+            this.laserG.fill();
         }
     }
 
@@ -534,6 +753,18 @@ export class Fighter extends Component {
         if (this.flashT > 0) {
             this.flashT = Math.max(0, this.flashT - dt);
             if (this.flashT === 0) this.drawSelf(); // clean repaint after flash
+        }
+        // HP regen — Mini Militia style: slow recovery after 4s out of combat
+        if (this.alive && this.hp > 0 && this.hp < CFG.MAX_HP) {
+            if (this.regenDelay > 0) {
+                this.regenDelay -= dt;
+            } else {
+                const oldHp = this.hp;
+                this.hp = Math.min(CFG.MAX_HP, this.hp + CFG.HP_REGEN_RATE * dt);
+                if (Math.floor(this.hp) !== Math.floor(oldHp)) {
+                    bus.emit(Evt.HP_CHANGED, this.id, Math.max(0, this.hp), this.teamLabel);
+                }
+            }
         }
         // squash & stretch springs back to neutral
         this.squash += (1 - this.squash) * Math.min(1, 12 * dt);
