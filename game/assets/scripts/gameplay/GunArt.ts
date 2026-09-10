@@ -174,6 +174,28 @@ function drawSingleGunOffset(g: Graphics, def: WeaponDef, ox: number, oy: number
 }
 
 function drawFlashAt(g: Graphics, def: WeaponDef, mx: number, my: number, t: number) {
+    if ((def.id as string) === 'flamethrower') {
+        const len = 34 * (0.6 + 0.4 * t);
+        const spread = 15 * (0.6 + 0.4 * t);
+        g.fillColor = new Color(255, 90, 20, Math.floor(180 * t));
+        g.moveTo(mx, my);
+        g.lineTo(mx + len, my - spread);
+        g.lineTo(mx + len * 1.25, my);
+        g.lineTo(mx + len, my + spread);
+        g.close();
+        g.fill();
+        g.fillColor = new Color(255, 210, 40, Math.floor(220 * t));
+        g.moveTo(mx, my);
+        g.lineTo(mx + len * 0.7, my - spread * 0.55);
+        g.lineTo(mx + len * 0.85, my);
+        g.lineTo(mx + len * 0.7, my + spread * 0.55);
+        g.close();
+        g.fill();
+        g.fillColor = new Color(255, 255, 220, Math.floor(240 * t));
+        g.circle(mx + 3, my, 4);
+        g.fill();
+        return;
+    }
     const v = def.visual;
     const r = v.flashSize * (0.55 + 0.45 * t);
     g.fillColor = new Color(255, 210, 80, Math.floor(120 * t));
@@ -197,6 +219,29 @@ function drawFlashAt(g: Graphics, def: WeaponDef, mx: number, my: number, t: num
 
 /** Muzzle star + (for ballistic guns) one brass shell at the eject port. */
 function drawFlash(g: Graphics, def: WeaponDef, t: number) {
+    if ((def.id as string) === 'flamethrower') {
+        const mx = gunMuzzleX(def) + 2;
+        const len = 34 * (0.6 + 0.4 * t);
+        const spread = 15 * (0.6 + 0.4 * t);
+        g.fillColor = new Color(255, 90, 20, Math.floor(180 * t));
+        g.moveTo(mx, 0);
+        g.lineTo(mx + len, -spread);
+        g.lineTo(mx + len * 1.25, 0);
+        g.lineTo(mx + len, spread);
+        g.close();
+        g.fill();
+        g.fillColor = new Color(255, 210, 40, Math.floor(220 * t));
+        g.moveTo(mx, 0);
+        g.lineTo(mx + len * 0.7, -spread * 0.55);
+        g.lineTo(mx + len * 0.85, 0);
+        g.lineTo(mx + len * 0.7, spread * 0.55);
+        g.close();
+        g.fill();
+        g.fillColor = new Color(255, 255, 220, Math.floor(240 * t));
+        g.circle(mx + 3, 0, 4);
+        g.fill();
+        return;
+    }
     const v = def.visual;
     const r = v.flashSize * (0.55 + 0.45 * t);
     const mx = gunMuzzleX(def) + 2;
