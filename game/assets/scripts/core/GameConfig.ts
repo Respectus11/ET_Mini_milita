@@ -22,14 +22,24 @@ export const CFG = {
     JETPACK_REGEN: 34,       // fuel regenerated per second while idle
     JETPACK_REGEN_DELAY: 0.5,// seconds after release before regen kicks in
 
+    // --- wall mechanics (Mini Militia-style) --------------------------------
+    WALL_SLIDE_VY: -120,     // max fall speed while wall-sliding (px/s, negative = down)
+    WALL_JUMP_VX: 420,       // horizontal push speed when wall-jumping
+    WALL_JUMP_VY: 900,       // vertical push speed when wall-jumping
+    WALL_JUMP_FUEL_COST: 4,  // fuel used per wall-jump (not full jetpack)
+
     // --- fighter body -----------------------------------------------------
     PLAYER_W: 40,            // collision box width
     PLAYER_H: 62,            // collision box height
 
     // --- combat & match flow ---------------------------------------------
     MAX_HP: 100,             // full health of a fighter
-    RESPAWN_TIME: 2.5,       // seconds dead before respawning
-    INVULN_AFTER_SPAWN: 2.0, // blink-invulnerability window after spawn
+    RESPAWN_TIME: 3.0,       // seconds dead before respawning
+    INVULN_AFTER_SPAWN: 2.2, // blink-invulnerability window after spawn
+
+    // --- HP regen (Mini Militia style) ------------------------------------
+    HP_REGEN_RATE: 4,        // HP per second recovered while out of combat
+    HP_REGEN_DELAY: 4.0,     // seconds after last damage before regen starts
 
     FRAG_LIMIT: 10,          // kills needed to win the match outright
     MATCH_TIME: 240,         // match duration in seconds (4 minutes)
@@ -49,5 +59,12 @@ export const CFG = {
     MELEE_DMG: 22,           // melee damage
     MELEE_CD: 0.55,          // cooldown between melee swipes (s)
 
-    BOT_COUNT: 1,            // AI opponents spawned in solo mode
+    // --- bots & match settings -------------------------------------------
+    BOT_COUNT: 3,            // default AI opponents spawned in solo mode
+    BOT_COUNT_MAX: 6,        // maximum bots allowed
+    BOT_PICKUP_RANGE: 80,    // how close a bot must be to pick up an item (px)
+
+    // --- frag / time options for match settings menu ----------------------
+    FRAG_OPTIONS: [5, 10, 15, 20, 30] as number[],
+    TIME_OPTIONS: [120, 180, 240, 360, 480] as number[], // seconds
 };
