@@ -15,6 +15,7 @@ const en: Record<string, string> = {
     map_simien: 'Simien Mountains',
     map_merkato: 'Merkato Rooftops',
     map_danakil: 'Danakil Salt Flats',
+    map_addis: 'Addis Arena',
     frag_limit: 'Frag Limit',
     time_limit: 'Time Limit',
     start: 'START',
@@ -36,6 +37,7 @@ const en: Record<string, string> = {
     w_smg: 'SMG',
     w_magnum: 'Magnum',
     w_plasma: 'Plasma Gun',
+    w_flamethrower: 'Flamethrower',
     grenade: 'Grenade',
     headshot: 'HEADSHOT!',
     double_kill: 'DOUBLE KILL!',
@@ -48,6 +50,8 @@ const en: Record<string, string> = {
     char_almaz: 'Almaz',
     char_desta: 'Desta',
     char_hanna: 'Hanna',
+    char_kebede: 'Kebede',
+    char_mekdes: 'Mekdes',
     choose_char_p1: 'P1 Character',
     choose_char_p2: 'P2 Character',
     customize: 'Customize Outfit',
@@ -84,6 +88,16 @@ const en: Record<string, string> = {
     off: 'Off',
     sfx: 'Sound FX',
     sfx_soon: 'Sound effects: coming soon',
+    // match settings
+    match_settings: 'Match Settings',
+    bot_count: 'Bot Count',
+    difficulty: 'Difficulty',
+    easy: 'Easy',
+    normal: 'Normal',
+    hard: 'Hard',
+    wall_slide_hint: 'Hold into a wall mid-air to slide!',
+    // kill feed extras
+    eliminated: 'ELIMINATED',
 };
 
 export function loadLang() { /* English only */ }
