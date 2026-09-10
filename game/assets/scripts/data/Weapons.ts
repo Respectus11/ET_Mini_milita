@@ -17,6 +17,7 @@ export enum WeaponId {
     SMG = 'smg',
     MAGNUM = 'magnum',
     PLASMA = 'plasma',
+    FLAMETHROWER = 'flamethrower',
 }
 
 export interface WeaponDef {
@@ -149,12 +150,27 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
             flashSize: 11,
         },
     },
+    // Flamethrower — close-range terror, continuous fire cone, no reload.
+    // Low speed so flames arc downward for natural cone coverage.
+    [WeaponId.FLAMETHROWER]: {
+        id: WeaponId.FLAMETHROWER, nameKey: 'w_flamethrower',
+        dmg: 4, pellets: 3, rof: 18, spreadDeg: 22, speed: 480,
+        magSize: 80, reloadTime: 2.2, gravityScale: 0.55,
+        splashRadius: 0, recoil: 8, auto: true,
+        visual: {
+            body: 0x7b3f00, accent: 0xff5500,
+            barrelLen: 30, barrelH: 13,
+            stock: true, mag: false, scope: false, pump: false, tube: true,
+            flashSize: 20,
+        },
+    },
 };
 
 /** Stable index order for LAN snapshots (weapon id -> wire index). */
 export const WEAPON_LIST: WeaponId[] = [
     WeaponId.RIFLE, WeaponId.SHOTGUN, WeaponId.SNIPER,
     WeaponId.LAUNCHER, WeaponId.SMG, WeaponId.MAGNUM, WeaponId.PLASMA,
+    WeaponId.FLAMETHROWER,
 ];
 
 /** Crates roll from this pool (weights emerge from repetition). */
@@ -162,4 +178,5 @@ export const CRATE_POOL: WeaponId[] = [
     WeaponId.RIFLE, WeaponId.RIFLE, WeaponId.SHOTGUN,
     WeaponId.SMG, WeaponId.SMG, WeaponId.SNIPER,
     WeaponId.LAUNCHER, WeaponId.MAGNUM, WeaponId.PLASMA,
+    WeaponId.FLAMETHROWER,
 ];
