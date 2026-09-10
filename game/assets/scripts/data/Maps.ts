@@ -13,6 +13,9 @@
  *   'E' bot spawn point    'W' weapon crate (random weapon)
  *   'B' buna speed boost   'I' injera heal   'M' mesob shield
  *   'X' explosive red barrel
+ *
+ * Maps 1-4 are 30×16 (1920×1024). Map 5 (Addis) is also 30×16 but uses
+ * a night urban theme with 3 vertical shafts and fire-escape platforms.
  */
 import { Color } from 'cc';
 
@@ -132,6 +135,33 @@ export const MAPS: MapDef[] = [
             '####......................####',
             '........................M.....',
             '.....E.................E......',
+            '------------------------------',
+            '##############################',
+        ],
+    },
+    // ── Addis Arena — night urban tower, vertical play, rooftop sniping ──────
+    {
+        id: 'addis', nameKey: 'map_addis',
+        skyTop:    new Color(14,  20,  58),   // deep midnight navy
+        skyBottom: new Color(48,  34,  88),   // dusk purple
+        tileFill:  new Color(70,  76,  84),   // concrete grey
+        tileEdge:  new Color(44,  48,  52),   // dark concrete seam
+        decoColor: new Color(210, 90,  18),   // rust-orange fire-escape rails
+        rows: [
+            '..............................',
+            '....X...........E.....X.......',
+            '..####..-..........-.####.....',
+            '..#...I.............W..#......',
+            '..#...-.............-.#.......',
+            '..####.....E....E.####........',
+            '......--...........--.........',
+            '.P.....E...........E......Q...',
+            '######..--.......--..######...',
+            '..............................',
+            '..--...B.....W.....M..--......',
+            '.......####.....####..........',
+            '..E..X..---..I..---.X..E.....',
+            '..............................',
             '------------------------------',
             '##############################',
         ],
