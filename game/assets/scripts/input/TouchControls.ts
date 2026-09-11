@@ -1,42 +1,49 @@
 /**
  * TouchControls.ts
  * ---------------------------------------------------------------------------
- * Mini-Militia-style dual-stick touch handling.
+ * Authentic Mini-Militia-style dual virtual joysticks with visual feedback.
  *
- * 1P mode : left half of the screen is the move/jetpack stick (push up to
- *           fly, pull down to drop through platforms), right half is the
- *           aim stick — pushing it past 30% fires.
- * 2P mode : P1 owns the left 45% of the screen, P2 the right 45%; the middle
- *           10% is dead space so thumbs don't cross contaminate sticks.
+ * Left Stick : 360° flight thruster & ground move (push up to fly with jetpack).
+ * Right Stick: 360° aim reticle & auto-fire (pull past 30% to fire weapon).
  *
- * Sticks are "floating": the origin is wherever the finger first lands.
+ * Features:
+ * - Rendered virtual joysticks (base rings, thumb pucks, fire thresholds).
+ * - Rest/idle guide indicators so players immediately know where to place thumbs.
+ * - Dynamic floating response: expands and anchors wherever the finger lands.
  */
-import { _decorator, Component, EventTouch, input, Input, view } from 'cc';
+import { _decorator, Color, Component, EventTouch, Graphics, input, Input, Node, UITransform, view } from 'cc';
 const { ccclass } = _decorator;
 import { AimInput, Fighter, MoveInput } from '../gameplay/Fighter';
 import { StickState, stickVec } from './Stick';
+import { ensureUT } from '../core/UIUtil';
 
 interface Slot { side: 0 | 1; slot: 'move' | 'aim'; }
 
-/**
- * Mini-Militia-style dual-stick touch controls.
- * 1P mode: left half of screen = move/jetpack stick, right half = aim/fire stick.
- * 2P same-device mode: P1 owns left 45%, P2 owns right 45% of the screen.
- */
+const C_BASE_BG = new Color(20, 25, 32, 100);
+const C_BASE_BORDER = new Color(70, 180, 240, 150);
+const C_PUCK_MOVE = new Color(60, 200, 255, 180);
+const C_PUCK_AIM_IDLE = new Color(240, 200, 60, 180);
+const C_PUCK_AIM_FIRE = new Color(255, 80, 40, 230);
+const C_FIRE_RING = new Color(255, 90, 50, 120);
+
 @ccclass('TouchControls')
 export class TouchControls extends Component {
     enabledP1 = true;
     enabledP2 = false;
 
     private sticks: Map<number, Slot> = new Map();
-    /** Magnitude of the P1 aim stick last frame (LAN guest fire intent). */
     lastMagP1 = 0;
     private p1move: StickState = { active: false, ox: 0, oy: 0, cx: 0, cy: 0 };
     private p1aim: StickState = { active: false, ox: 0, oy: 0, cx: 0, cy: 0 };
     private p2move: StickState = { active: false, ox: 0, oy: 0, cx: 0, cy: 0 };
     private p2aim: StickState = { active: false, ox: 0, oy: 0, cx: 0, cy: 0 };
 
+    private g: Graphics = null!;
+
     start() {
+        ensureUT(this.node);
+        this.g = this.node.addComponent(Graphics);
+
         input.on(Input.EventType.TOUCH_START, this.onTouchStart, this);
         input.on(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
         input.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
@@ -102,6 +109,8 @@ export class TouchControls extends Component {
             this.lastMagP1 = f1.alive ? m : 0;
         }
         if (this.enabledP2 && f2) this.driveFighter(f2, this.p2move, this.p2aim);
+
+        this.renderVisualSticks();
     }
 
     private driveFighter(f: Fighter, mv: StickState, aim: StickState) {
@@ -122,6 +131,118 @@ export class TouchControls extends Component {
         }
     }
 
+    private renderVisualSticks() {
+        if (!this.g) return;
+        const g = this.g;
+        g.clear();
+
+        const vis = view.getVisibleSize();
+        const halfW = vis.width / 2;
+        const halfH = vis.height / 2;
+
+        const toNodeX = (uiX: number) => uiX - halfW;
+        const toNodeY = (uiY: number) => uiY - halfH;
+
+        const R_BASE = 72;
+        const R_PUCK = 28;
+
+        // Default resting positions if not touched
+        const defaultMoveX = -halfW + 160;
+        const defaultMoveY = -halfH + 160;
+        const defaultAimX = halfW - 160;
+        const defaultAimY = -halfH + 160;
+
+        // 1. Move Joystick (Left)
+        if (this.p1move.active) {
+            const ox = toNodeX(this.p1move.ox);
+            const oy = toNodeY(this.p1move.oy);
+            const dx = this.p1move.cx - this.p1move.ox;
+            const dy = this.p1move.cy - this.p1move.oy;
+            const dist = Math.min(R_BASE, Math.hypot(dx, dy));
+            const angle = Math.atan2(dy, dx);
+            const px = ox + Math.cos(angle) * dist;
+            const py = oy + Math.sin(angle) * dist;
+
+            // Outer ring
+            g.lineWidth = 3;
+            g.strokeColor = C_BASE_BORDER;
+            g.fillColor = C_BASE_BG;
+            g.circle(ox, oy, R_BASE);
+            g.fill();
+            g.stroke();
+
+            // Inner thumb puck
+            g.lineWidth = 2.5;
+            g.strokeColor = new Color(255, 255, 255, 220);
+            g.fillColor = C_PUCK_MOVE;
+            g.circle(px, py, R_PUCK);
+            g.fill();
+            g.stroke();
+        } else {
+            // Subtle resting outline
+            g.lineWidth = 2;
+            g.strokeColor = new Color(70, 180, 240, 60);
+            g.circle(defaultMoveX, defaultMoveY, R_BASE * 0.85);
+            g.stroke();
+            g.fillColor = new Color(70, 180, 240, 40);
+            g.circle(defaultMoveX, defaultMoveY, R_PUCK * 0.75);
+            g.fill();
+        }
+
+        // 2. Aim Joystick (Right)
+        if (this.p1aim.active) {
+            const ox = toNodeX(this.p1aim.ox);
+            const oy = toNodeY(this.p1aim.oy);
+            const dx = this.p1aim.cx - this.p1aim.ox;
+            const dy = this.p1aim.cy - this.p1aim.oy;
+            const dist = Math.min(R_BASE, Math.hypot(dx, dy));
+            const angle = Math.atan2(dy, dx);
+            const px = ox + Math.cos(angle) * dist;
+            const py = oy + Math.sin(angle) * dist;
+            const isFiring = dist > R_BASE * 0.30;
+
+            // Outer ring
+            g.lineWidth = 3;
+            g.strokeColor = isFiring ? C_FIRE_RING : C_BASE_BORDER;
+            g.fillColor = C_BASE_BG;
+            g.circle(ox, oy, R_BASE);
+            g.fill();
+            g.stroke();
+
+            // Fire threshold circle
+            g.lineWidth = 1.5;
+            g.strokeColor = new Color(255, 120, 60, 130);
+            g.circle(ox, oy, R_BASE * 0.30);
+            g.stroke();
+
+            // Aim direction guide
+            if (dist > 10) {
+                g.lineWidth = 2;
+                g.strokeColor = isFiring ? new Color(255, 80, 40, 190) : new Color(250, 210, 60, 160);
+                g.moveTo(ox, oy);
+                g.lineTo(ox + Math.cos(angle) * R_BASE * 1.15, oy + Math.sin(angle) * R_BASE * 1.15);
+                g.stroke();
+            }
+
+            // Inner thumb puck
+            g.lineWidth = 2.5;
+            g.strokeColor = new Color(255, 255, 255, 220);
+            g.fillColor = isFiring ? C_PUCK_AIM_FIRE : C_PUCK_AIM_IDLE;
+            g.circle(px, py, R_PUCK);
+            g.fill();
+            g.stroke();
+        } else {
+            // Subtle resting outline
+            g.lineWidth = 2;
+            g.strokeColor = new Color(250, 210, 60, 60);
+            g.circle(defaultAimX, defaultAimY, R_BASE * 0.85);
+            g.stroke();
+            g.fillColor = new Color(250, 210, 60, 40);
+            g.circle(defaultAimX, defaultAimY, R_PUCK * 0.75);
+            g.fill();
+        }
+    }
+
     clearAll(f1: Fighter, f2: Fighter | null) {
         const reset = (f: Fighter) => {
             const m: MoveInput = f.moveIn, a: AimInput = f.aimIn;
@@ -130,5 +251,6 @@ export class TouchControls extends Component {
         };
         reset(f1);
         if (f2) reset(f2);
+        this.g?.clear();
     }
 }
