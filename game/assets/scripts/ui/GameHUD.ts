@@ -33,6 +33,9 @@ export class GameHUD extends Component {
     private grenadeBtn: Node | null = null;
     private grenadeBadgeLbl: Label | null = null;
     public onGrenade: (() => void) | null = null;
+    private meleeBtn: Node | null = null;
+    private respawnNode: Node | null = null;
+    private respawnLbl: Label | null = null;
     private bannerNode: Node | null = null;
     private bannerLbl: Label | null = null;
     private onPause: (() => void) | null = null;
@@ -235,6 +238,37 @@ export class GameHUD extends Component {
         });
         this.grenadeBtn = gBtn;
 
+        // Tactical Melee / Kick Button
+        const mBtn = new Node('meleeBtn');
+        this.node.addChild(mBtn);
+        mBtn.setPosition(W / 2 - 80 - S, -235, 0);
+        ensureUT(mBtn).setContentSize(85, 85);
+        const mg = mBtn.addComponent(Graphics);
+        mg.fillColor = withAlpha(Theme.surface, 220);
+        mg.circle(0, 0, 36);
+        mg.fill();
+        mg.lineWidth = 2.5;
+        mg.strokeColor = Theme.line;
+        mg.circle(0, 0, 36);
+        mg.stroke();
+
+        // Punch fist icon in center
+        mg.fillColor = new Color(255, 180, 50, 240);
+        mg.roundRect(-12, -8, 24, 16, 5);
+        mg.fill();
+        mg.fillColor = new Color(230, 150, 30, 240);
+        mg.roundRect(-10, 5, 12, 7, 3);
+        mg.fill();
+        mg.fillColor = new Color(200, 130, 25, 240);
+        mg.rect(-8, -14, 16, 8);
+        mg.fill();
+
+        mBtn.on(Node.EventType.TOUCH_END, () => {
+            punchScale(mBtn, 0.88, DUR.instant);
+            this.me?.tryMelee();
+        });
+        this.meleeBtn = mBtn;
+
         // pause: drawn icon (two bars in a ring), generous touch target
         const pBtn = new Node('pause');
         this.node.addChild(pBtn);
@@ -297,6 +331,22 @@ export class GameHUD extends Component {
         banN.setPosition(0, 170, 0);
         banN.active = false;
         this.bannerNode = banN;
+
+        // Respawn countdown overlay
+        const respNode = new Node('respawnOverlay');
+        this.node.addChild(respNode);
+        ensureUT(respNode);
+        respNode.setPosition(0, 40, 0);
+        this.respawnLbl = respNode.addComponent(Label);
+        this.respawnLbl.fontSize = 48;
+        this.respawnLbl.lineHeight = 54;
+        this.respawnLbl.isBold = true;
+        this.respawnLbl.color = new Color(255, 230, 100);
+        this.respawnLbl.enableOutline = true;
+        this.respawnLbl.outlineColor = new Color(0, 0, 0, 220);
+        this.respawnLbl.outlineWidth = 3;
+        respNode.active = false;
+        this.respawnNode = respNode;
 
         // damage vignette (full-screen red bands, flashed via UIOpacity)
         const vN = new Node('vignette');
@@ -405,8 +455,15 @@ export class GameHUD extends Component {
                 g.fill();
             }
             const frac = Math.max(0, f.hp / CFG.MAX_HP);
-            g.fillColor = frac > 0.5 ? this.cHpHigh
+            let barColor = frac > 0.5 ? this.cHpHigh
                 : frac > 0.25 ? this.cHpMid : this.cHpLow;
+            // Green pulse when regenerating HP
+            if (f.isRegenerating) {
+                const pulse = Math.sin(this.time * 9);
+                const gVal = Math.round(180 + 75 * pulse);
+                barColor = new Color(40, gVal, 90, 255);
+            }
+            g.fillColor = barColor;
             if (frac > 0) {
                 g.roundRect(-w / 2 + 2, 10, (w - 4) * frac, h - 4, 4);
                 g.fill();
@@ -434,6 +491,21 @@ export class GameHUD extends Component {
         if (this.me && this.grenadeBadgeLbl) {
             const count = this.me.grenades.toString();
             if (this.grenadeBadgeLbl.string !== count) this.grenadeBadgeLbl.string = count;
+        }
+
+        // respawn countdown readout
+        if (this.me && !this.me.alive && this.me.respawnTimer > 0) {
+            const sec = Math.ceil(this.me.respawnTimer);
+            if (this.respawnNode && this.respawnLbl) {
+                this.respawnNode.active = true;
+                const txt = `RESPAWNING IN ${sec}...`;
+                if (this.respawnLbl.string !== txt) {
+                    this.respawnLbl.string = txt;
+                    punchScale(this.respawnNode, 1.15, DUR.instant);
+                }
+            }
+        } else if (this.respawnNode && this.respawnNode.active) {
+            this.respawnNode.active = false;
         }
 
         this.updateChip();
