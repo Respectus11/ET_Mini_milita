@@ -15,6 +15,7 @@ import { WeaponId, WEAPONS } from '../data/Weapons';
 import { drawGun } from '../gameplay/GunArt';
 import { LanClient, PeerMsg } from '../net/LanClient';
 import { Sfx } from '../core/Audio';
+import { BotDifficulty } from '../ai/BotBrain';
 
 export type MenuMode = 'bots' | 'local' | 'netHost' | 'netGuest';
 
@@ -29,6 +30,10 @@ export interface MenuState {
     outfitP2: OutfitOverride;
     /** Live LAN connection handed over to GameRoot on match start. */
     lan: LanClient | null;
+    botCount?: number;
+    difficulty?: BotDifficulty;
+    fragLimit?: number;
+    matchTime?: number;
 }
 
 // ---- outfit editor palettes ----------------------------------------------
@@ -53,6 +58,10 @@ export class MainMenu extends Component {
         mode: 'bots', mapIndex: 0, twoPlayers: false, charP1: 0, charP2: 1,
         outfitP1: loadOutfit('p1'), outfitP2: loadOutfit('p2'),
         lan: null,
+        botCount: CFG.BOT_COUNT,
+        difficulty: 1,
+        fragLimit: CFG.FRAG_LIMIT,
+        matchTime: CFG.MATCH_TIME,
     };
     onStart: ((s: MenuState) => void) | null = null;
 
@@ -125,6 +134,11 @@ export class MainMenu extends Component {
         const settingsBtn = this.button(t('settings'), 780, 430, () => this.openSettingsPanel(),
             220, 70, new Color(62, 74, 96));
         popIn(settingsBtn, DUR.quick, 0.2);
+
+        // match settings toggle
+        const matchBtn = this.button(t('match_settings'), -780, 430, () => this.openMatchSetupPanel(),
+            260, 70, new Color(46, 100, 70));
+        popIn(matchBtn, DUR.quick, 0.2);
 
         // map selector
         this.title(t('map_select'), 0, 190, TYPE.body);
@@ -837,6 +851,99 @@ export class MainMenu extends Component {
 
         makeButton(pn, {
             text: t('done'), x: 0, y: -340, w: 300, h: 84,
+            fill: new Color(46, 125, 50),
+            onClick: () => this.closePanel(),
+        });
+    }
+
+    /** Match configuration panel: bot count, AI difficulty, frag limit, match time. */
+    private openMatchSetupPanel() {
+        if (this.panelNode && this.panelNode.isValid) this.closePanel();
+        const W = 1920, H = 1080;
+        const CW = Math.max(W, coverSize().w);
+        const pn = new Node('matchSettingsPanel');
+        this.node.addChild(pn);
+        pn.addComponent(UITransform);
+        this.panelNode = pn;
+        const g = pn.addComponent(Graphics);
+        g.fillColor = new Color(8, 10, 16, 240);
+        g.rect(-CW / 2, -H / 2, CW, H);
+        g.fill();
+        popIn(pn, DUR.medium);
+
+        const lblN = (str: string, x: number, y: number, size: number, color?: Color) => {
+            const n = new Node('mslbl' + x + '_' + y);
+            pn.addChild(n);
+            ensureUT(n);
+            n.setPosition(x, y, 0);
+            const l = n.addComponent(Label);
+            l.string = str;
+            l.fontSize = size;
+            l.lineHeight = Math.floor(size * 1.3);
+            l.color = color ?? new Color(235, 235, 235);
+            (n.getComponent(UITransform)!).setContentSize(500, size * 1.4);
+            return l;
+        };
+
+        lblN(t('match_settings'), 0, 400, TYPE.h1, new Color(255, 226, 150));
+
+        const optionRow = (label: string, y: number, valueFn: () => string, onCycle: () => void) => {
+            lblN(label, -220, y, TYPE.body, new Color(200, 205, 215));
+            const btn = makeButton(pn, {
+                text: valueFn(), x: 300, y, w: 320, h: 76,
+                fill: new Color(46, 125, 50),
+                onClick: () => {
+                    onCycle();
+                    btn.getComponentInChildren(Label)!.string = valueFn();
+                },
+            });
+        };
+
+        // 1. Bot Count (1 to 6)
+        optionRow(t('bot_count'), 240,
+            () => `${this.state.botCount ?? CFG.BOT_COUNT} Bots`,
+            () => {
+                const cur = this.state.botCount ?? CFG.BOT_COUNT;
+                this.state.botCount = cur >= 6 ? 1 : cur + 1;
+            });
+
+        // 2. Difficulty (Easy / Normal / Hard)
+        const diffLabels = [t('easy'), t('normal'), t('hard')];
+        optionRow(t('difficulty'), 120,
+            () => diffLabels[this.state.difficulty ?? 1],
+            () => {
+                const cur = this.state.difficulty ?? 1;
+                this.state.difficulty = ((cur + 1) % 3) as BotDifficulty;
+            });
+
+        // 3. Frag Limit (5, 10, 15, 20, 25)
+        const fragOptions = [5, 10, 15, 20, 25];
+        optionRow(t('frag_limit'), 0,
+            () => `${this.state.fragLimit ?? CFG.FRAG_LIMIT} Kills`,
+            () => {
+                const cur = this.state.fragLimit ?? CFG.FRAG_LIMIT;
+                const idx = fragOptions.indexOf(cur);
+                this.state.fragLimit = fragOptions[(idx + 1) % fragOptions.length];
+            });
+
+        // 4. Time Limit (2:00, 3:00, 5:00, 10:00)
+        const timeOptions = [120, 180, 300, 600];
+        const timeLabels: Record<number, string> = {
+            120: '2:00 Min',
+            180: '3:00 Min',
+            300: '5:00 Min',
+            600: '10:00 Min',
+        };
+        optionRow(t('time_limit'), -120,
+            () => timeLabels[this.state.matchTime ?? CFG.MATCH_TIME] ?? `${this.state.matchTime}s`,
+            () => {
+                const cur = this.state.matchTime ?? CFG.MATCH_TIME;
+                const idx = timeOptions.indexOf(cur);
+                this.state.matchTime = timeOptions[(idx + 1) % timeOptions.length];
+            });
+
+        makeButton(pn, {
+            text: t('done'), x: 0, y: -300, w: 300, h: 84,
             fill: new Color(46, 125, 50),
             onClick: () => this.closePanel(),
         });
