@@ -11,15 +11,20 @@ original text. Built with **Cocos Creator 3.8**, the same engine family as the o
 ## Features
 
 - Jetpack + dual-stick combat loop with custom AABB physics vs tile grids
-- Weapons: Rifle, Shotgun, Sniper, Grenade Launcher, SMG, Magnum, Plasma Gun
-- Tactical throwable grenades, dual-wielding, and explosive steel barrels
-- Headshot criticals, killstreak announcements, and sniper laser sight
-- Weapon crates scattered on every map grant a random full-magazine weapon
-- Melee lunges, one-way platforms, drop-through floors, jetpack fuel economy
-- Bot AI: patrol / chase / attack / retreat states with grenade/barrel awareness
-- Four battlefields: Lalibela, Simien, Merkato, Danakil
-- Modes: vs Bots, Two Players on the same device, and LAN multiplayer
-- Frag-limit and timed matches, respawns, results screen, rematch flow
+- 8 Weapons: Rifle, Shotgun, Sniper, Grenade Launcher, SMG, Magnum, Plasma Gun, Flamethrower
+- Tactical throwable grenades, dual-wielding, and interactive explosive steel barrels
+- Physical dropped weapons on combatant elimination with despawn halos and pickup detection
+- Wall-sliding physics and wall-jumping off vertical surfaces with friction sound FX
+- Out-of-combat gradual health regeneration (Mini Militia style recovery)
+- Headshot criticals, killstreak announcements, and weapon-specific laser sight guides
+- Weapon crates scattered across maps granting random full-magazine weapons
+- Melee lunges, one-way platforms, drop-through floors, and jetpack fuel management
+- Bot AI: Easy, Normal, and Hard difficulties with predictive aiming and item scavenging
+- Five battlefields: Lalibela, Simien, Merkato, Danakil, and Addis Arena (night urban tower)
+- Roster: 6 customizable Ethiopian fighters (Abebe, Almaz, Desta, Hanna, Kebede, Mekdes)
+- Modes: vs Bots (1-6 opponents), Two Players on same device, and LAN multiplayer
+- Custom match settings: configurable bot count, AI difficulty, frag limits, and match timer
+- Frag-limit and timed matches, respawns with countdown overlay, results screen, rematch flow
 
 ## Quick start
 
@@ -42,12 +47,14 @@ The harness ships a typed `cc` stub, so typos and missing fields in
 gameplay classes are caught outside the editor.
 
 ## Controls (touch)
-
-| Zone | Action |
-|---|---|
-| Left stick | Walk left/right, push up = jetpack thrust, pull down = drop through platform |
-| Right stick | Aim in any direction; push past 30% to fire |
-| `| |` button (top-left) | Pause / results |
+ 
+ | Zone | Action |
+ |---|---|
+ | Left stick | Walk left/right, push up = jetpack thrust, pull down = drop through platform |
+ | Right stick | Aim 360 degrees; push past 30% threshold to continuous fire |
+ | Fist button | Tactical melee punch / close-quarters knockback |
+ | Grenade button | Lob explosive grenade along trajectory arc |
+ | `| |` button (top-left) | Pause / match settings |
 
 ## Project layout
 

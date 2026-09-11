@@ -6,14 +6,19 @@ All code, art (procedural), and text are original. Nothing is copied from Appsom
 
 ## What's implemented
 - Jetpack + dual-stick combat core loop (custom AABB physics vs tile grid)
-- 4 weapons: Rifle / Shotgun / Sniper / Grenade Launcher (splash damage)
-- Weapon crates on the map grant a random full-magazine weapon
-- Melee attack when close, jetpack fuel management, one-way platforms
-- Bot AI: patrol → chase → attack → retreat, line-of-sight checks
-- 4 maps: Lalibela, Simien, Merkato, Danakil
+- 8 weapons: Rifle, Shotgun, Sniper, Grenade Launcher, SMG, Magnum, Plasma Gun, Flamethrower
+- Tactical throwable grenades, dual-wielding, and interactive explosive steel barrels
+- Physical dropped weapons upon fighter death with despawn warning halos
+- Wall-sliding physics, vertical wall-jumping, and out-of-combat HP regeneration
+- Weapon crates on the map grant random full-magazine weapons
+- Melee punch button, jetpack fuel management, one-way platforms, and drop-through floors
+- Bot AI: Easy, Normal, and Hard difficulties with predictive lead aiming and smart item scavenging
+- 5 maps: Lalibela, Simien, Merkato, Danakil, and Addis Arena (night urban tower)
+- Roster of 6 customizable fighters (Abebe, Almaz, Desta, Hanna, Kebede, Mekdes)
 - Full English interface
-- Modes: vs Bot, Two Players on same device (split touch zones)
-- Procedural Web Audio synthesizer (weapons, explosions, jetpack, hits, pickups, countdown, victory)
+- Modes: vs Bots (1-6 opponents), Two Players on same device (split touch zones), LAN multiplayer
+- Match Settings: configurable bot count, AI difficulty, frag limits, and match duration
+- Procedural Web Audio synthesizer (weapons, flamethrower, wall slide, explosions, jetpack, hits, pickups, countdown, victory)
 - Zero-asset juice engine: pooled VFX particles, floating damage/KO text, screen shake, squash & stretch
 - Frag limit win condition + match timer + countdown sequence + results screen
 
