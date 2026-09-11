@@ -6,15 +6,17 @@ import { clamp, fmtTime } from '../core/Utils';
 import { ensureUT } from '../core/UIUtil';
 import { CHARACTERS, CharacterDef, OutfitOverride, resolveChar } from '../data/Characters';
 import { MAPS, MapDef } from '../data/Maps';
-import { WeaponId, WEAPONS, WEAPON_LIST } from '../data/Weapons';
+import { WeaponDef, WeaponId, WEAPONS, WEAPON_LIST } from '../data/Weapons';
 import { Fighter } from './Fighter';
+import { gunMuzzleX } from './GunArt';
 import { PickupItem } from './PickupItem';
 import { WeaponCrate } from './WeaponCrate';
+import { DroppedWeapon } from './DroppedWeapon';
 import { ProjectileSystem } from './Projectile';
 import { ExplosiveBarrel } from './ExplosiveBarrel';
 import { Grenade } from './Grenade';
 import { TileWorld } from '../world/TileWorld';
-import { BotBrain } from '../ai/BotBrain';
+import { BotBrain, BotDifficulty } from '../ai/BotBrain';
 import { PeerMsg } from '../net/LanClient';
 import { Effects } from '../world/Effects';
 import { ScreenShake } from '../world/ScreenShake';
@@ -34,6 +36,14 @@ export interface MatchOptions {
     outfitP2?: OutfitOverride;
     /** LAN multiplayer role. 'host' simulates; 'guest' mirrors snapshots. */
     netRole?: NetRole;
+    /** Number of bots to spawn (1-6, default CFG.BOT_COUNT). */
+    botCount?: number;
+    /** Bot AI difficulty: 0=Easy 1=Normal 2=Hard (default 1). */
+    difficulty?: BotDifficulty;
+    /** Frag limit override (default CFG.FRAG_LIMIT). */
+    fragLimit?: number;
+    /** Match time in seconds override (default CFG.MATCH_TIME). */
+    matchTime?: number;
 }
 
 @ccclass('MatchManager')
@@ -54,8 +64,11 @@ export class MatchManager extends Component {
 
     barrels: ExplosiveBarrel[] = [];
     grenades: Grenade[] = [];
+    droppedWeapons: DroppedWeapon[] = [];
     private killStreaks: Map<number, { current: number; lastKillT: number; multikill: number }> = new Map();
     private matchClock = 0;
+    private firstBloodDone = false;     // first kill of the match
+    private fragLimit = CFG.FRAG_LIMIT; // resolved from opts
 
     scores: Map<number, number> = new Map();
     timeLeft = CFG.MATCH_TIME;
@@ -92,6 +105,8 @@ export class MatchManager extends Component {
 
     start() {
         this.netRole = this.opts.netRole ?? 'off';
+        this.fragLimit  = this.opts.fragLimit  ?? CFG.FRAG_LIMIT;
+        this.timeLeft   = this.opts.matchTime  ?? CFG.MATCH_TIME;
         this.mapDef = MAPS[clamp(this.opts.mapIndex, 0, MAPS.length - 1)];
         this.world = new TileWorld(this.mapDef);
 
@@ -168,6 +183,7 @@ export class MatchManager extends Component {
             f.onShoot = (shooter) => this.fireWeapon(shooter);
             f.onMelee = (attacker) => this.resolveMelee(attacker);
             f.onThrowGrenade = (shooter, vx, vy) => this.throwGrenade(shooter, vx, vy);
+            f.onDropWeapon = (fighter, weapon, x, y) => this.spawnDroppedWeapon(weapon, x, y);
             this.scores.set(f.id, 0);
             return f;
         };
@@ -191,22 +207,26 @@ export class MatchManager extends Component {
 
             // LAN matches share bots: identical roster on both devices,
             // simulated by the host only and mirrored via snapshots.
-            const wantBots = this.netRole !== 'off' ? CFG.BOT_COUNT : 0;
+            const wantBots = this.netRole !== 'off' ? (this.opts.botCount ?? CFG.BOT_COUNT) : 0;
+            const diff     = this.opts.difficulty ?? 1;
             for (let i = 0; i < wantBots; i++) {
                 const b = mk(CHARACTERS[(i + 2) % CHARACTERS.length], true, 'BOT' + (i + 1));
                 b.giveWeapon(WEAPONS[WeaponId.RIFLE]);
                 const sb = this.safeSpawn('e');
                 b.spawnAt(sb[0], sb[1]);
-                if (this.netRole === 'host') this.bots.push(new BotBrain(b, this.world));
+                if (this.netRole === 'host')
+                    this.bots.push(new BotBrain(b, this.world, diff));
                 this.fighters.push(b);
             }
         } else {
-            for (let i = 0; i < CFG.BOT_COUNT; i++) {
+            const wantBots = this.opts.botCount ?? CFG.BOT_COUNT;
+            const diff     = this.opts.difficulty ?? 1;
+            for (let i = 0; i < wantBots; i++) {
                 const b = mk(CHARACTERS[(i + 2) % CHARACTERS.length], true, 'BOT' + (i + 1));
                 b.giveWeapon(WEAPONS[WeaponId.RIFLE]);
                 const sb = this.safeSpawn('e');
                 b.spawnAt(sb[0], sb[1]);
-                this.bots.push(new BotBrain(b, this.world));
+                this.bots.push(new BotBrain(b, this.world, diff));
                 this.fighters.push(b);
             }
         }
@@ -327,22 +347,40 @@ export class MatchManager extends Component {
     private fireWeapon(f: Fighter) {
         if (this.netRole === 'guest') return; // visuals come from snapshots
         const w = f.weapon;
-        const muzzleX = f.x + f.faceDir * (f.w * 0.55);
-        const muzzleY = f.y + f.h * 0.06;
         const baseAng = Math.atan2(f.aimIn.ay, f.aimIn.ax);
+        const pivotX = f.x + f.faceDir * (f.w * 0.12);
+        const pivotY = f.y - f.h * 0.04;
+        const barrelDist = gunMuzzleX(w);
+        const muzzleX = pivotX + Math.cos(baseAng) * barrelDist;
+        const muzzleY = pivotY + Math.sin(baseAng) * barrelDist;
+        const isFlame = (w.id as string) === 'flamethrower';
         for (let p = 0; p < w.pellets; p++) {
-            const ang = baseAng + (Math.random() - 0.5) * (w.spreadDeg * Math.PI / 180);
-            const col = w.id === WeaponId.LAUNCHER ? new Color(255, 120, 40)
-                : w.id === WeaponId.SNIPER ? new Color(140, 255, 140)
-                : w.id === WeaponId.SMG ? new Color(150, 235, 255)
-                : w.id === WeaponId.PLASMA ? new Color(0, 240, 255)
-                : w.id === WeaponId.MAGNUM ? new Color(255, 215, 0)
+            const spread = isFlame ? w.spreadDeg * 1.6 : w.spreadDeg;
+            const ang = baseAng + (Math.random() - 0.5) * (spread * Math.PI / 180);
+            const col = isFlame ? new Color(255, 80 + Math.random() * 80 | 0, 20)
+                : w.id === WeaponId.LAUNCHER ? new Color(255, 120, 40)
+                : w.id === WeaponId.SNIPER   ? new Color(140, 255, 140)
+                : w.id === WeaponId.SMG      ? new Color(150, 235, 255)
+                : w.id === WeaponId.PLASMA   ? new Color(0, 240, 255)
+                : w.id === WeaponId.MAGNUM   ? new Color(255, 215, 0)
                 : new Color(255, 240, 120);
             this.projectiles.spawn(f.id, muzzleX, muzzleY, ang,
-                w.speed * (0.95 + Math.random() * 0.1), w, col);
+                w.speed * (0.95 + Math.random() * 0.1), w, col, isFlame);
         }
+        if (isFlame) Sfx.playFlame();
         // heavy guns kick the screen a little
         if (w.recoil >= 150) this.shake.add(0.06);
+    }
+
+    private spawnDroppedWeapon(w: WeaponDef, x: number, y: number) {
+        if (this.netRole === 'guest') return;
+        const n = new Node('drop_' + w.id);
+        this.itemsRoot.addChild(n);
+        const d = n.addComponent(DroppedWeapon);
+        const vx = (Math.random() - 0.5) * 140;
+        const vy = 160 + Math.random() * 80;
+        d.setup(w, x, y, vx, vy, this.world, this.fx);
+        this.droppedWeapons.push(d);
     }
 
     private resolveMelee(a: Fighter) {
@@ -378,8 +416,18 @@ export class MatchManager extends Component {
                 Theme.gold, Theme.flagGreen, Theme.flagRed,
             ], 30);
             this.fx.floatText(victim.x, victim.y + 40, 'KO!', Theme.goldHi, 40);
-            this.shake.add(0.5);
-            this.hitStopT = 0.07;
+            this.shake.add(0.65);   // stronger on death
+            this.hitStopT = 0.09;
+        }
+
+        // First Blood announcement
+        if (killerId !== victimId && !this.firstBloodDone) {
+            this.firstBloodDone = true;
+            Sfx.playKillstreak(1);
+            bus.emit(Evt.KILLSTREAK, killerId, 'first_blood', 1);
+            const kf = this.fighters.find(f => f.id === killerId);
+            if (kf && this.fx)
+                this.fx.floatText(kf.x, kf.y + 60, 'FIRST BLOOD!', new Color(255, 60, 60, 255), 44);
         }
 
         // Killstreak calculation
@@ -417,7 +465,7 @@ export class MatchManager extends Component {
         }
 
         const killer = this.fighters.find(f => f.id === killerId);
-        if (killer && (this.scores.get(killerId) ?? 0) >= CFG.FRAG_LIMIT) {
+        if (killer && (this.scores.get(killerId) ?? 0) >= this.fragLimit) {
             this.endMatch(killerId);
         }
     }
@@ -629,6 +677,13 @@ export class MatchManager extends Component {
         if (this.netRole === 'host') this.applyRemoteInput();
 
         for (const b of this.bots) {
+            // give bots fresh references to all live pickups and crates
+            b.pickups = this.itemsRoot.children
+                .map(n => n.getComponent(PickupItem)!)
+                .filter(Boolean);
+            b.crates = this.crateRoot.children
+                .map(n => n.getComponent(WeaponCrate)!)
+                .filter(Boolean);
             b.tick(sdt, this.fighters.filter(f => f !== b.me));
         }
 
@@ -672,11 +727,28 @@ export class MatchManager extends Component {
         for (let i = this.respawnQueue.length - 1; i >= 0; i--) {
             const r = this.respawnQueue[i];
             r.t -= sdt;
+            r.f.respawnTimer = Math.max(0, r.t);
             if (r.t <= 0) {
                 const kind = r.f.teamLabel === 'P1' ? 'p' : r.f.teamLabel === 'P2' ? 'q' : 'e';
                 const sp = this.safeSpawn(kind as 'p' | 'q' | 'e');
                 r.f.spawnAt(sp[0], sp[1]);
                 this.respawnQueue.splice(i, 1);
+            }
+        }
+
+        // dropped weapons physics & pickup check
+        for (let i = this.droppedWeapons.length - 1; i >= 0; i--) {
+            const dw = this.droppedWeapons[i];
+            const alive = dw.tick(sdt);
+            if (!alive) {
+                this.droppedWeapons.splice(i, 1);
+                continue;
+            }
+            for (const f of this.fighters) {
+                if (f.alive && dw.tryTake(f)) {
+                    this.droppedWeapons.splice(i, 1);
+                    break;
+                }
             }
         }
 
