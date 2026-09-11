@@ -187,6 +187,10 @@ export class GameRoot extends Component {
             outfitP1: s.outfitP1,
             outfitP2: s.outfitP2,
             netRole,
+            botCount: s.botCount,
+            difficulty: s.difficulty,
+            fragLimit: s.fragLimit,
+            matchTime: s.matchTime,
         };
 
         match.onEnd = (winnerId) => this.scheduleOnce(() => this.showResults(match, winnerId), 0.9);
