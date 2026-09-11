@@ -1,0 +1,102 @@
+{
+  "platform": "android",
+  "debug": true,
+  "outputName": "android",
+  "buildMode": "normal",
+  "packages": {
+    "android": {
+      "packageName": "com.et.mminimilitia",
+      "apiLevel": "auto",
+      "appABIs": [
+        "armeabi-v7a",
+        "arm64-v8a"
+      ],
+      "useDebugKeystore": true,
+      "keystorePassword": "",
+      "keystoreAlias": "",
+      "keystoreAliasPassword": "",
+      "sdkPath": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\android-sdk",
+      "ndkPath": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\android-sdk\\ndk\\23.1.7779620",
+      "javaHome": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\jdk-17.0.20.1+1",
+      "javaPath": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\jdk-17.0.20.1+1\\bin\\java.exe",
+      "program": {
+        "sdkPath": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\android-sdk",
+        "ndkPath": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\android-sdk\\ndk\\23.1.7779620",
+        "javaHome": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\jdk-17.0.20.1+1"
+      },
+      "swappy": false,
+      "renderBackEnd": {
+        "vulkan": false,
+        "gles3": true,
+        "gles2": true
+      },
+      "resizeableActivity": true,
+      "maxAspectRatio": "2.4",
+      "orientation": {
+        "portrait": false,
+        "upsideDown": false,
+        "landscapeRight": true,
+        "landscapeLeft": true
+      },
+      "keystorePath": "",
+      "appBundle": false,
+      "androidInstant": false,
+      "inputSDK": false,
+      "remoteUrl": ""
+    },
+    "native": {
+      "encrypted": false,
+      "xxteaKey": "e4k3HwzdRPJbDn7o",
+      "compressZip": false,
+      "JobSystem": "none"
+    }
+  },
+  "taskName": "android",
+  "mainBundleCompressionType": "merge_dep",
+  "name": "et-mini-militia",
+  "server": "",
+  "engineModulesConfigKey": "defaultConfig",
+  "buildPath": "project://build",
+  "mangleProperties": false,
+  "md5Cache": false,
+  "skipCompressTexture": false,
+  "sourceMaps": false,
+  "nativeCodeBundleMode": "wasm",
+  "polyfills": {
+    "asyncFunctions": false
+  },
+  "experimentalEraseModules": false,
+  "startSceneAssetBundle": false,
+  "bundleConfigs": [],
+  "inlineEnum": true,
+  "useBuiltinServer": false,
+  "packAutoAtlas": true,
+  "startScene": "f13fdc6a-3a25-4e00-9740-f3abc5a7e918",
+  "overwriteProjectSettings": {
+    "macroConfig": {
+      "cleanupImageCache": "inherit-project-setting"
+    },
+    "includeModules": {
+      "physics": "inherit-project-setting",
+      "physics-2d": "inherit-project-setting",
+      "gfx-webgl2": "off"
+    }
+  },
+  "md5CacheOptions": {
+    "excludes": [],
+    "includes": [],
+    "replaceOnly": [],
+    "handleTemplateMd5Link": true
+  },
+  "mainBundleIsRemote": false,
+  "useSplashScreen": true,
+  "bundleCommonChunk": false,
+  "scenes": [
+    {
+      "url": "db://assets/main.scene",
+      "uuid": "f13fdc6a-3a25-4e00-9740-f3abc5a7e918"
+    }
+  ],
+  "wasmCompressionMode": false,
+  "logDest": "project://temp/builder/log/android8-25-2026 23-08.log"
+}

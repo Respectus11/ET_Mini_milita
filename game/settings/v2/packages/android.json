@@ -1,0 +1,41 @@
+{
+  "__version__": "1.0.1",
+  "packageName": "com.et.mminimilitia",
+  "apiLevel": "auto",
+  "appABIs": [
+    "armeabi-v7a",
+    "arm64-v8a"
+  ],
+  "useDebugKeystore": true,
+  "keystorePassword": "",
+  "keystoreAlias": "",
+  "keystoreAliasPassword": "",
+  "sdkPath": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\android-sdk",
+  "ndkPath": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\android-sdk\\ndk\\23.1.7779620",
+  "javaHome": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\jdk-17.0.20.1+1",
+  "javaPath": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\jdk-17.0.20.1+1\\bin\\java.exe",
+  "program": {
+    "sdkPath": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\android-sdk",
+    "ndkPath": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\android-sdk\\ndk\\23.1.7779620",
+    "javaHome": "C:\\Users\\hp\\AppData\\Local\\Temp\\opencode\\apk-toolchain\\jdk-17.0.20.1+1"
+  },
+  "swappy": false,
+  "renderBackEnd": {
+    "vulkan": false,
+    "gles3": true,
+    "gles2": true
+  },
+  "resizeableActivity": true,
+  "maxAspectRatio": "2.4",
+  "orientation": {
+    "portrait": false,
+    "upsideDown": false,
+    "landscapeRight": true,
+    "landscapeLeft": true
+  },
+  "keystorePath": "",
+  "appBundle": false,
+  "androidInstant": false,
+  "inputSDK": false,
+  "remoteUrl": ""
+}
