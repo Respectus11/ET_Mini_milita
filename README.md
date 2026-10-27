@@ -1,81 +1,121 @@
 # ET Mini Militia
 
-An original 2D jetpack shooter for mobile, inspired by the feel of classic
-Mini Militia but built from scratch — original code, original procedural art,
-original text. Built with **Cocos Creator 3.8**, the same engine family as the original game.
+An original 2D jetpack shooter prototype for mobile, built with **Cocos Creator 3.8** and TypeScript. The project combines fast platform movement, arena combat, bot opponents, and local-network multiplayer with Ethiopian-inspired maps and characters.
 
-> Legal note: this project contains **nothing** extracted from Appsomniacs'
-> Mini Militia. The `reference/` folder (git-ignored) is local-only study
-> material about how the original is engineered; see `docs/FINDINGS.md`.
+The code, procedural graphics, and text in this repository are original. The project does not include extracted game assets or source code from Appsomniacs' Mini Militia.
 
 ## Features
 
-- Jetpack + dual-stick combat loop with custom AABB physics vs tile grids
-- 8 Weapons: Rifle, Shotgun, Sniper, Grenade Launcher, SMG, Magnum, Plasma Gun, Flamethrower
-- Tactical throwable grenades, dual-wielding, and interactive explosive steel barrels
-- Physical dropped weapons on combatant elimination with despawn halos and pickup detection
-- Wall-sliding physics and wall-jumping off vertical surfaces with friction sound FX
-- Out-of-combat gradual health regeneration (Mini Militia style recovery)
-- Headshot criticals, killstreak announcements, and weapon-specific laser sight guides
-- Weapon crates scattered across maps granting random full-magazine weapons
-- Melee lunges, one-way platforms, drop-through floors, and jetpack fuel management
-- Bot AI: Easy, Normal, and Hard difficulties with predictive aiming and item scavenging
-- Five battlefields: Lalibela, Simien, Merkato, Danakil, and Addis Arena (night urban tower)
-- Roster: 6 customizable Ethiopian fighters (Abebe, Almaz, Desta, Hanna, Kebede, Mekdes)
-- Modes: vs Bots (1-6 opponents), Two Players on same device, and LAN multiplayer
-- Custom match settings: configurable bot count, AI difficulty, frag limits, and match timer
-- Frag-limit and timed matches, respawns with countdown overlay, results screen, rematch flow
+### Combat and movement
+- Jetpack movement with fuel management, wall sliding, and wall jumps
+- Dual-stick aiming and firing, melee attacks, grenades, and dual-wielding
+- Eight weapon types, weapon crates, physical weapon drops, and explosive barrels
+- Headshot criticals, killstreak announcements, health regeneration, and respawns
 
-## Quick start
+### Game modes and content
+- Matches against 1–6 bots, with Easy, Normal, and Hard difficulty settings
+- Two players on one device and local-network multiplayer
+- Match settings for bot count, AI difficulty, frag limit, and match duration
+- Five maps: Lalibela, Simien, Merkato, Danakil, and Addis Arena
+- Six selectable fighters: Abebe, Almaz, Desta, Hanna, Kebede, and Mekdes
+- Match countdown, results screen, and rematch flow
 
-1. Install [Cocos Creator 3.8.x](https://www.cocos.com/en/creator-download)
-   via Cocos Dashboard (not bundled with the repo).
-2. Open this repo's `game/` folder as a project.
-3. Open `assets/main.scene` — a GameRoot node is already wired up. Press Play.
-4. Desktop preview uses WASD + mouse; touch devices get the dual-stick
-   overlay automatically. Phones are the primary target — see
-   [`BUILD.md`](BUILD.md) for the Android build and on-device LAN play.
+### Technical highlights
+- Custom 2D AABB collision and tile-grid world logic
+- Bot AI with state-based behavior, predictive aiming, and item scavenging
+- Procedural graphics and synthesized sound effects
+- LAN room relay implemented in Node.js without third-party runtime dependencies
+- Standalone TypeScript checking harness
 
-## Type-checking without the editor
+## Requirements
 
+- [Cocos Creator 3.8.x](https://www.cocos.com/en/creator-download)
+- Node.js for the optional LAN relay and TypeScript check
+- Android Studio, Android SDK/NDK, and JDK 17 when building a native Android package
+
+## Run in Cocos Creator
+
+1. Install Cocos Creator 3.8.x through the Cocos Dashboard.
+2. Open the repository's `game/` directory as a project.
+3. Open `assets/main.scene`.
+4. Start the preview from the editor.
+
+Desktop preview supports keyboard and mouse controls. Touch devices use the on-screen dual-stick controls. The game is primarily designed for phones.
+
+## Controls
+
+| Input | Action |
+| --- | --- |
+| Left movement stick | Move left or right |
+| Push up on the left stick | Use the jetpack |
+| Pull down on the left stick | Drop through a one-way platform |
+| Right stick | Aim and fire |
+| Fist button | Melee attack |
+| Grenade button | Throw a grenade |
+| Pause/settings button | Pause or configure the match |
+
+For desktop preview, use WASD or arrow keys to move, Space to fly, the mouse to aim/fire, and R to reload.
+
+## Local-network multiplayer
+
+The relay pairs two game clients on the same local network. It is not a public matchmaking service.
+
+1. Connect both phones and the computer running the relay to the same Wi-Fi network.
+2. From the repository root, start the relay:
+
+   ```bash
+   node tools/lan-relay.mjs
+   ```
+
+   The default port is `9420`. To use a different port, pass it as an argument, for example `node tools/lan-relay.mjs 9500`.
+
+3. Use one of the printed `ws://<local-ip>:9420` addresses on both devices.
+4. On the first phone, choose **LAN Host** and create a room.
+5. On the second phone, choose **LAN Join** and enter the room code.
+
+Allow the selected port through the host computer's firewall if the devices cannot connect.
+
+## Type-checking
+
+The standalone harness can check the game's TypeScript files without opening the editor:
+
+```bash
+cd tools/tsc-check
+npm install
+npx tsc -p tsconfig.json --noEmit
 ```
-cd tools/tsc-check && npm install
-..\node_modules\.bin\tsc.cmd -p tsconfig.json --noEmit
-```
-
-The harness ships a typed `cc` stub, so typos and missing fields in
-gameplay classes are caught outside the editor.
-
-## Controls (touch)
- 
- | Zone | Action |
- |---|---|
- | Left stick | Walk left/right, push up = jetpack thrust, pull down = drop through platform |
- | Right stick | Aim 360 degrees; push past 30% threshold to continuous fire |
- | Fist button | Tactical melee punch / close-quarters knockback |
- | Grenade button | Lob explosive grenade along trajectory arc |
- | `| |` button (top-left) | Pause / match settings |
 
 ## Project layout
 
+```text
+docs/
+  ARCHITECTURE.md     System design and subsystem notes
+  FINDINGS.md         Research and implementation notes
+game/assets/
+  main.scene          Main Cocos Creator scene
+  scripts/
+    GameRoot.ts       Main menu, match, and results flow
+    ai/               Bot decision-making
+    core/             Configuration, events, settings, audio, utilities
+    data/             Weapon, character, map, and string definitions
+    gameplay/         Fighters, weapons, projectiles, and match logic
+    net/              LAN client
+    ui/               Menu and in-game interface
+    world/            Tile-based world and collision logic
+tools/
+  lan-relay.mjs       Local multiplayer room relay
+  tsc-check/          Standalone type-checking harness
+BUILD.md              Android build and device-testing instructions
 ```
-docs/FINDINGS.md      reverse-engineering notes on the original's architecture
-game/assets/scripts/
-  GameRoot.ts         menu -> match -> results phase machine
-  core/               tuning constants, event bus, pooling, utils
-  data/               weapons, characters, maps, EN+AM strings
-  world/              TileWorld: parsing, collision, raycasts, rendering
-  gameplay/           Fighter, ProjectileSystem, WeaponCrate, MatchManager
-  ai/                 bot FSM brain
-  input/              dual-stick touch + desktop keyboard/mouse
-  net/                LanClient for LAN rooms (relay protocol)
-  ui/                 code-built main menu and HUD
-tools/lan-relay.mjs   zero-dependency LAN room relay (node tools/lan-relay.mjs)
-tools/tsc-check/      standalone TypeScript sanity harness (typed cc stub)
-```
+
+## Build for Android
+
+See [BUILD.md](BUILD.md) for the Android build configuration, device testing, and troubleshooting steps. Native builds require the Android build tools supported by your installed Cocos Creator version.
 
 ## Roadmap
 
-- Hand-drawn sprite atlases replacing the procedural Graphics look
-- Sound effects and music wired through the existing event bus
-- Team modes, more bots per match, ranked scoring persistence
+The project is under active development. Potential next steps include improving the visual asset pipeline, expanding game modes, and refining LAN synchronization.
+
+## License
+
+A license file is not currently included in the repository. Confirm the intended license before redistributing the project.
